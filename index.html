@@ -49,7 +49,7 @@
 <div id="edge"></div>
 <div id="title">
   <h1>风物</h1>
-  <div class="sub">你是一阵风</div>
+  <div class="sub">&nbsp;</div>
   <div class="how">移动鼠标 / 手指，决定风往哪里吹<br>按住鼠标或空格，吹得更快<br>建议戴上耳机</div>
   <div class="go">点击开始</div>
 </div>
@@ -130,6 +130,10 @@ const PALETTES = {
     blossom: C('#c9d4e6'), blossomAmt: 0.5, sun: C('#9fb4e0'), sunI: 0.9, hemiSky: C('#506489'), hemiGround: C('#1a2236'), hemiI: 0.9,
     cloud: C('#53607e'), cloudO: 0.45, ink: C('#e6e1d2'), window: C('#ffb45e'), stars: 1, glow: C('#dfe9ff'), roof: C('#b9c4d6'), pine: C('#3c5a58') },
 };
+PALETTES.deep = { ...PALETTES.winter, skyTop: C('#060b1a'), skyHor: C('#1a2238'), fog: C('#141a2c'), sunI: 0.6, hemiI: 0.75,
+  window: C('#b07a44'), cloudO: 0.3, glow: C('#cfdcf5') };
+PALETTES.dawn = { ...PALETTES.spring, skyTop: C('#7d8fb8'), skyHor: C('#f2cbb0'), fog: C('#e3cfc4'), grass: C('#b4b9ad'), sun: C('#ffcfa0'),
+  sunI: 1.4, hemiI: 1.1, cloud: C('#f6d9cc'), stars: 0.15 };
 function blendPal(a, b, t) {
   const o = {};
   for (const k in a) o[k] = a[k].isColor ? a[k].clone().lerp(b[k], t) : lerp(a[k], b[k], t);
@@ -256,6 +260,7 @@ const ICO = r => new THREE.IcosahedronGeometry(r, 0);
 // Low-frequency noise marks where forest wants to be; each grove picks its species from altitude
 // (broadleaf low in the valley, pine up on the slopes), big trees in the middle thinning out at the edge.
 const VZ = 160, VX = riverX(VZ) + 58;
+const OLD = { x: VX - 30, z: VZ - 22 }; OLD.y = H(OLD.x, OLD.z);
 const trees = [], groves = [];
 const grid = new Map(), CELL = 8;
 const forestN = (x, z) => fbm(x * 0.0055 + 50, z * 0.0055 - 30);
@@ -282,7 +287,7 @@ const gauss = () => (rand() + rand() + rand() - 1.5) / 1.5;
 // 1. village first, so groves leave room for it
 {
   // the old tree at the village entrance
-  const ox = VX - 30, oz = VZ - 22, oy = H(ox, oz);
+  const ox = OLD.x, oz = OLD.z, oy = OLD.y;
   plant({ x: ox, y: oy, z: oz, s: 3.1, type: 'leaf', blossom: false });
   // a small orchard of blossoming fruit trees in loose rows
   const oa = 0.4, cx = VX + 52, cz = VZ + 30;
@@ -563,11 +568,11 @@ trailGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(TRA
 trailGeo.setAttribute('aAge', new THREE.BufferAttribute(new Float32Array(TRAIL).map((_, i) => i / TRAIL), 1));
 const trailMat = new THREE.ShaderMaterial({
   transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-  uniforms: { col: { value: new THREE.Color(0xffffff) }, scale: { value: innerHeight } },
+  uniforms: { col: { value: new THREE.Color(0xffffff) }, scale: { value: innerHeight }, fade: { value: 1 } },
   vertexShader: `attribute float aAge; varying float vA; uniform float scale;
     void main(){ vA = aAge; vec4 mv = modelViewMatrix*vec4(position,1.); gl_PointSize = (1.6 - aAge*1.3) * scale * 0.9 / -mv.z; gl_Position = projectionMatrix*mv; }`,
-  fragmentShader: `uniform vec3 col; varying float vA;
-    void main(){ float d = length(gl_PointCoord - .5); float a = smoothstep(.5, 0., d) * (1. - vA) * .5; gl_FragColor = vec4(col, a); }`,
+  fragmentShader: `uniform vec3 col; uniform float fade; varying float vA;
+    void main(){ float d = length(gl_PointCoord - .5); float a = smoothstep(.5, 0., d) * (1. - vA) * .5 * fade; gl_FragColor = vec4(col, a); }`,
 });
 const trail = new THREE.Points(trailGeo, trailMat); trail.frustumCulled = false; trail.renderOrder = 9; scene.add(trail);
 
@@ -614,6 +619,7 @@ const sound = {
     this.nextPad = ctx.currentTime + 0.5;
   },
   scale: [62, 64, 66, 69, 71], // D pentatonic
+  windScale: 1,
   mtof: m => 440 * Math.pow(2, (m - 69) / 12),
   tone(freq, t, dur, level, type = 'sine', dest = this.padLP, attack = 1.8) {
     const ctx = this.ctx, o = ctx.createOscillator(), g = ctx.createGain();
@@ -625,7 +631,7 @@ const sound = {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
     this.bp.frequency.setTargetAtTime(260 + speed01 * 1100, t, 0.3);
-    this.windGain.gain.setTargetAtTime(0.06 + speed01 * 0.16, t, 0.3);
+    this.windGain.gain.setTargetAtTime((0.06 + speed01 * 0.16) * this.windScale, t, 0.6);
     if (t > this.nextPad) {
       const s = this.scale, root = s[Math.floor(Math.random() * 3)] - 12;
       [0, 2, 4].forEach((k, i) => {
@@ -665,9 +671,10 @@ function applyInk() {
 }
 
 // ---------------------------------------------------------------- beacons
+let stage = new THREE.Group(); scene.add(stage);
 function beacon(color) {
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: SOFT, color, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
-  s.scale.setScalar(8); scene.add(s); return s;
+  s.scale.setScalar(8); stage.add(s); return s;
 }
 
 // ---------------------------------------------------------------- chapters
@@ -687,7 +694,7 @@ function setupSpring() {
       const s = new THREE.Sprite(mat), sc = 26 + rand() * 30;
       s.scale.set(sc * 1.5, sc * 0.8, 1); s.position.set((rand() - 0.5) * 60, (rand() - 0.3) * 10, (rand() - 0.5) * 60); g.add(s);
     }
-    scene.add(g);
+    stage.add(g);
     const t = { pos: g.position, done: false, radius: 32, fade: 0,
       beacon: beacon(0xffffff),
       onTouch() {
@@ -705,26 +712,12 @@ function setupSpring() {
 
 // 清明: lift the kites
 const kiteColors = [0xd9534f, 0xf0b429, 0x3f7cbf, 0x5aa36a, 0xe07aa0, 0xef8a3c];
-function setupQingming() {
-  const list = [];
-  const spots = [[60, 150], [-50, 40], [70, -60], [-60, -180], [55, -300], [-45, 260]];
-  spots.forEach(([dx, z], k) => {
-    const x = riverX(z) + dx, y = H(x, z);
-    const coat = '#' + new THREE.Color(kiteColors[(k + 2) % 6]).getHexString();
-    const child = new THREE.Mesh(merge([
-      part(CYL(0.13, 0.15, 0.7, 5), '#3b3a44', [-0.2, 0.35, 0]), part(CYL(0.13, 0.15, 0.7, 5), '#3b3a44', [0.2, 0.35, 0]),
-      part(CYL(0.38, 0.62, 1.15, 7), coat, [0, 1.25, 0]),
-      part(CYL(0.1, 0.12, 0.85, 5), coat, [0.48, 1.85, 0.1], [0.3, 0, -0.6]),          // arm raised, holding the line
-      part(CYL(0.1, 0.12, 0.75, 5), coat, [-0.45, 1.35, 0], [0, 0, 0.35]),
-      part(new THREE.IcosahedronGeometry(0.42, 1), '#f1d6bd', [0, 2.15, 0]),
-      part(new THREE.IcosahedronGeometry(0.45, 1), '#2e2a28', [0, 2.3, -0.08], [0, 0, 0], [1, 0.75, 1]),
-    ]), kitMat);
-    child.position.set(x, y - 0.1, z); child.rotation.y = rand() * 6; child.scale.setScalar(1.9); child.castShadow = true; scene.add(child);
+function makeKite(color, tailColor) {
     // an original paper kite: wide wings, a painted centre, two ribbon tails
     const wing = new THREE.Shape();
     const pts = [[0, 2.1], [0.55, 1.35], [2.5, 1.45], [2.1, 0.55], [0.9, 0.15], [1.3, -1.0], [0.25, -0.75], [0, -1.3]];
     wing.moveTo(0, 2.1); pts.slice(1).forEach(([a, b]) => wing.lineTo(a, b)); [...pts].reverse().slice(1).forEach(([a, b]) => wing.lineTo(-a, b));
-    const kc = '#' + new THREE.Color(kiteColors[k]).getHexString();
+    const kc = '#' + new THREE.Color(color).getHexString();
     const kite = new THREE.Mesh(merge([
       bake(new THREE.ShapeGeometry(wing), kc),
       part(new THREE.CircleGeometry(0.55, 12), '#fbf6ea', [0, 0.7, 0.02]),
@@ -735,13 +728,33 @@ function setupQingming() {
       part(BOX(4.6, 0.06, 0.06), '#5b4a3c', [0, 1.1, -0.05], [0, 0, 0.0]),
     ]), new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }));
     kite.scale.setScalar(1.7);
-    const tailMat = new THREE.MeshBasicMaterial({ color: kiteColors[(k + 1) % 6], side: THREE.DoubleSide });
+    const tailMat = new THREE.MeshBasicMaterial({ color: tailColor, side: THREE.DoubleSide });
     const tail = new THREE.Group(); tail.position.y = -1.3; kite.add(tail);
     for (const sx of [-0.3, 0.3]) { const r = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 4.2), tailMat); r.position.set(sx, -2.1, 0); tail.add(r); }
-    kite.position.set(x + 2, y + 1.2, z); kite.rotation.x = -1.3; scene.add(kite);
+    kite.userData.tail = tail;
+    return kite;
+}
+function setupQingming() {
+  const list = [];
+  const spots = [[60, 150], [-50, 40], [70, -60], [-60, -180], [55, -300], [-45, 260]];
+  spots.forEach(([dx, z], k) => {
+    if (k === 0) z = FAM.girl.z;
+    const x = k === 0 ? FAM.girl.x : riverX(z) + dx, y = H(x, z);
+    const coat = '#' + new THREE.Color(kiteColors[(k + 2) % 6]).getHexString();
+    const child = new THREE.Mesh(merge([
+      part(CYL(0.13, 0.15, 0.7, 5), '#3b3a44', [-0.2, 0.35, 0]), part(CYL(0.13, 0.15, 0.7, 5), '#3b3a44', [0.2, 0.35, 0]),
+      part(CYL(0.38, 0.62, 1.15, 7), coat, [0, 1.25, 0]),
+      part(CYL(0.1, 0.12, 0.85, 5), coat, [0.48, 1.85, 0.1], [0.3, 0, -0.6]),          // arm raised, holding the line
+      part(CYL(0.1, 0.12, 0.75, 5), coat, [-0.45, 1.35, 0], [0, 0, 0.35]),
+      part(new THREE.IcosahedronGeometry(0.42, 1), '#f1d6bd', [0, 2.15, 0]),
+      part(new THREE.IcosahedronGeometry(0.45, 1), '#2e2a28', [0, 2.3, -0.08], [0, 0, 0], [1, 0.75, 1]),
+    ]), kitMat);
+    child.position.set(x, y - 0.1, z); child.rotation.y = rand() * 6; child.scale.setScalar(1.9); child.castShadow = true; child.visible = k !== 0; stage.add(child);
+    const kite = makeKite(kiteColors[k], kiteColors[(k + 1) % 6]), tail = kite.userData.tail;
+    kite.position.set(x + 2, y + 1.2, z); kite.rotation.x = -1.3; stage.add(kite);
     const lineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
     const line = new THREE.Line(lineGeo, new THREE.LineBasicMaterial({ color: 0x555555, transparent: true, opacity: 0.55 }));
-    line.frustumCulled = false; line.visible = false; scene.add(line);
+    line.frustumCulled = false; line.visible = false; stage.add(line);
     const t = { pos: new THREE.Vector3(x, y + 3, z), done: false, radius: 28, lift: 0, ph: rand() * 6,
       beacon: beacon(kiteColors[k]),
       onTouch() { line.visible = true; },
@@ -794,6 +807,7 @@ function setupWinter() {
     const a = k / 8 * Math.PI * 2 + 0.3, r = 30 + (k % 3) * 16;
     let x = VX + Math.cos(a) * r, z = VZ + Math.sin(a) * r;
     if (Math.abs(x - riverX(z)) < 20) x += 30;
+    if (k === 0) { x = FAM.lantern.x; z = FAM.lantern.z; }
     const y = Math.max(H(x, z), WATER) + 1.2;
     const g = makeLantern(x, y, z);
     const t = { pos: g.position, done: false, radius: 22,
@@ -842,7 +856,7 @@ const sailMat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading:
 function setupSummer() {
   const list = [];
   [360, 230, 40, -120, -270, -400].forEach((z0, k) => {
-    const boat = new THREE.Group(); scene.add(boat);
+    const boat = new THREE.Group(); stage.add(boat);
     const hull = new THREE.Mesh(HULL, kitMat); hull.castShadow = true; boat.add(hull);
     const pivot = new THREE.Group(); pivot.position.set(1.3, 1.0, 0); boat.add(pivot);
     const sail = new THREE.Mesh(SAIL, sailMat); sail.castShadow = true; pivot.add(sail);
@@ -914,7 +928,7 @@ function setupAutumn() {
     spots.push({ x, y, z });
   }
   spots.forEach((sp, k) => {
-    const g = new THREE.Group(); g.position.set(sp.x, sp.y - 0.15, sp.z); g.rotation.y = rand() * 6; scene.add(g);
+    const g = new THREE.Group(); g.position.set(sp.x, sp.y - 0.15, sp.z); g.rotation.y = rand() * 6; stage.add(g);
     const floor = new THREE.Mesh(floorGeo, kitMat); floor.receiveShadow = true; g.add(floor);
     const pileMat = new THREE.MeshLambertMaterial({ color: 0xa8935f, flatShading: true });
     const pile = new THREE.Mesh(pileGeo, pileMat); pile.position.set(1.5, 1.1, 0); pile.castShadow = true; g.add(pile);
@@ -945,37 +959,136 @@ function setupAutumn() {
   return list;
 }
 
+// ---------------------------------------------------------------- grandfather & granddaughter
+const FAM = (() => {
+  const F = new THREE.Vector3(Math.sign(riverX(OLD.z) - OLD.x) || -1, 0, 0);
+  const at = (f, l) => { const x = OLD.x + F.x * f, z = OLD.z + l; return new THREE.Vector3(x, H(x, z), z); };
+  return { F, at, yaw: Math.atan2(F.x, F.z), stool: at(4, 1), girl: at(5.8, 3.4), girlSit: at(5.2, 2.6), gpStand: at(4.6, -0.9),
+    grown: at(5.4, 3.0), child: at(6.6, 4.4), lantern: at(8.6, 1.8) };
+})();
+const HAIR = '#2b2725', WHITE = '#e6e3dc', SKIN = '#ecd0b4';
+const xf = (g, [x, y, z], [rx = 0, ry = 0, rz = 0] = [], sc = 1) => { g.scale(sc, sc, sc); g.rotateZ(rz); g.rotateX(rx); g.rotateY(ry); g.translate(x, y, z); return g; };
+const geoGrandpaSit = merge([
+  part(BOX(0.3, 0.28, 0.9), '#3b3a44', [-0.2, 0.74, 0.4]), part(BOX(0.3, 0.28, 0.9), '#3b3a44', [0.2, 0.74, 0.4]),
+  part(BOX(0.26, 0.65, 0.26), '#3b3a44', [-0.2, 0.35, 0.82]), part(BOX(0.26, 0.65, 0.26), '#3b3a44', [0.2, 0.35, 0.82]),
+  part(CYL(0.4, 0.56, 1.15, 7), '#5d6470', [0, 1.45, 0], [-0.08, 0, 0]),
+  part(CYL(0.1, 0.12, 0.8, 5), '#5d6470', [-0.45, 1.25, 0.35], [0.9, 0, 0]), part(CYL(0.1, 0.12, 0.8, 5), '#5d6470', [0.45, 1.25, 0.35], [0.9, 0, 0]),
+  part(new THREE.IcosahedronGeometry(0.38, 1), SKIN, [0, 2.35, 0.05]),
+  part(new THREE.IcosahedronGeometry(0.41, 1), WHITE, [0, 2.47, -0.03], [0, 0, 0], [1, 0.7, 1]),
+  part(new THREE.IcosahedronGeometry(0.19, 0), WHITE, [0, 2.12, 0.3]),
+]);
+const geoGrandpaStand = merge([
+  part(CYL(0.15, 0.17, 0.95, 5), '#3b3a44', [-0.22, 0.48, 0]), part(CYL(0.15, 0.17, 0.95, 5), '#3b3a44', [0.22, 0.48, 0]),
+  part(CYL(0.42, 0.6, 1.35, 7), '#5d6470', [0, 1.6, 0]),
+  part(CYL(0.1, 0.12, 0.85, 5), '#5d6470', [0.5, 1.6, 0.15], [0.3, 0, 0.25]),
+  part(CYL(0.1, 0.12, 0.85, 5), '#5d6470', [-0.5, 1.6, 0], [0, 0, -0.2]),
+  part(new THREE.IcosahedronGeometry(0.38, 1), SKIN, [0, 2.55, 0]),
+  part(new THREE.IcosahedronGeometry(0.41, 1), WHITE, [0, 2.67, -0.08], [0, 0, 0], [1, 0.7, 1]),
+  part(new THREE.IcosahedronGeometry(0.19, 0), WHITE, [0, 2.32, 0.28]),
+  part(CYL(0.05, 0.05, 2.3, 4), '#7a5a3c', [0.62, 1.12, 0.38]),
+]);
+function geoGirl(coat, sit) {
+  const y = sit ? -0.6 : 0, parts = [];
+  if (sit) parts.push(part(BOX(0.26, 0.24, 0.85), '#3b3a44', [-0.18, 0.12, 0.42]), part(BOX(0.26, 0.24, 0.85), '#3b3a44', [0.18, 0.12, 0.42]));
+  else parts.push(part(CYL(0.13, 0.15, 0.8, 5), '#3b3a44', [-0.18, 0.4, 0]), part(CYL(0.13, 0.15, 0.8, 5), '#3b3a44', [0.18, 0.4, 0]));
+  parts.push(
+    part(CYL(0.36, 0.56, 1.15, 7), coat, [0, 1.35 + y, 0]),
+    part(CYL(0.09, 0.1, 0.75, 5), coat, [0.48, 1.85 + y, 0.12], [0.3, 0, -0.6]),
+    part(CYL(0.09, 0.1, 0.7, 5), coat, [-0.42, 1.38 + y, 0], [0, 0, 0.35]),
+    part(new THREE.IcosahedronGeometry(0.4, 1), SKIN, [0, 2.25 + y, 0]),
+    part(new THREE.IcosahedronGeometry(0.42, 1), HAIR, [0, 2.36 + y, -0.07], [0, 0, 0], [1, 0.8, 1]),
+    part(ICO(0.17), HAIR, [-0.33, 2.55 + y, -0.05]), part(ICO(0.17), HAIR, [0.33, 2.55 + y, -0.05]));
+  return merge(parts);
+}
+const geoGrown = merge([
+  part(CYL(0.15, 0.17, 0.95, 5), '#3b3a44', [-0.2, 0.48, 0]), part(CYL(0.15, 0.17, 0.95, 5), '#3b3a44', [0.2, 0.48, 0]),
+  part(CYL(0.38, 0.6, 1.45, 7), '#9d4a42', [0, 1.65, 0]),
+  part(CYL(0.1, 0.11, 0.9, 5), '#9d4a42', [0.48, 1.62, 0.1], [0.25, 0, 0.22]),
+  part(CYL(0.1, 0.11, 0.9, 5), '#9d4a42', [-0.48, 1.62, 0], [0, 0, -0.2]),
+  part(new THREE.IcosahedronGeometry(0.38, 1), SKIN, [0, 2.65, 0]),
+  part(new THREE.IcosahedronGeometry(0.4, 1), HAIR, [0, 2.76, -0.07], [0, 0, 0], [1, 0.8, 1]),
+  part(new THREE.IcosahedronGeometry(0.22, 0), HAIR, [0, 2.8, -0.38]),
+]);
+const pinMat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, flatShading: true });
+function makePinwheel() {
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(merge([part(CYL(0.03, 0.03, 1.5, 4), '#8a6a4a', [0, 0.75, 0])]), kitMat));
+  const wheel = new THREE.Group(); wheel.position.set(0, 1.5, 0.06); g.add(wheel);
+  const blade = new THREE.Shape(); blade.moveTo(0, 0); blade.lineTo(0.62, 0.06); blade.lineTo(0.5, 0.52); blade.closePath();
+  const cols = ['#d9534f', '#f0b429', '#3f7cbf', '#5aa36a'];
+  wheel.add(new THREE.Mesh(merge([
+    ...cols.map((c, i) => part(new THREE.ShapeGeometry(blade), c, [0, 0, 0], [0, 0, i * Math.PI / 2])),
+    part(new THREE.IcosahedronGeometry(0.08, 0), '#f4efe2', [0, 0, 0.03]),
+  ]), pinMat));
+  return { g, wheel, spin: 0, target: 0 };
+}
+function figure(geo, scale = 1) { const m = new THREE.Mesh(geo, kitMat); m.castShadow = true; m.scale.setScalar(scale); return m; }
+const famStool = figure(merge([part(BOX(1.1, 0.6, 0.9), '#6b5038', [0, 0.3, 0])]));
+const famGrandpa = new THREE.Group(), gpSit = figure(geoGrandpaSit), gpStand = figure(geoGrandpaStand);
+famGrandpa.add(gpSit, gpStand);
+const famGirl = new THREE.Group(), girlStand = figure(geoGirl('#c0504a', false), 0.75), girlSit = figure(geoGirl('#c0504a', true), 0.75);
+famGirl.add(girlStand, girlSit);
+const pin = makePinwheel(); pin.g.position.set(0.5, 1.0, 0.3); pin.g.scale.setScalar(1.3); girlStand.add(pin.g); pin.g.scale.setScalar(1.3 / 0.75);
+const famGrown = figure(geoGrown);
+const famChild = new THREE.Group(), childM = figure(geoGirl('#e0a33a', false), 0.55); famChild.add(childM);
+const pin2 = makePinwheel(); pin2.g.position.set(0.5, 1.0, 0.3); childM.add(pin2.g); pin2.g.scale.setScalar(1.4 / 0.55);
+[famStool, famGrandpa, famGirl, famGrown, famChild].forEach(o => { o.rotation.y = FAM.yaw; scene.add(o); });
+famStool.position.copy(FAM.stool);
+let girlYaw = FAM.yaw, girlReact = 0, girlReactCD = 0, girlRun = null;
+function setFamily(mode) {
+  const M = { spring: ['sit', 'stand', true], qingming: ['sit', 'stand', false], summer: ['sit', 'sit', false], autumn: ['stand', 'stand', false],
+    winter: ['stand', 'stand', false], deep: [null, 'stand', false], end: [null, null, false] }[mode];
+  famGrandpa.visible = !!M[0]; gpSit.visible = M[0] === 'sit'; gpStand.visible = M[0] === 'stand';
+  famGrandpa.position.copy(M[0] === 'stand' ? FAM.gpStand : FAM.stool);
+  famGirl.visible = !!M[1]; girlStand.visible = M[1] === 'stand'; girlSit.visible = M[1] === 'sit';
+  famGirl.position.copy(M[1] === 'sit' ? FAM.girlSit : FAM.girl); famGirl.rotation.y = girlYaw = FAM.yaw;
+  pin.g.visible = M[2];
+  famGrown.visible = famChild.visible = mode === 'end';
+  famGrown.position.copy(FAM.grown); famChild.position.copy(FAM.child);
+  girlRun = null;
+}
+setFamily('spring');
+const OPENING = (() => { // the framing used at the very start and the very end
+  const c = FAM.at(11.5, -4.5); c.y = Math.max(c.y, WATER) + 2.6;
+  return { pos: c, look: FAM.stool.clone().lerp(FAM.girl, 0.5).add(new THREE.Vector3(0, 1.9, 0)) };
+})();
+
 const CHAPTERS = [
-  { key: 'spring', name: '立春', sub: '二月四日', intro: '山里的雪化了。\n老人说：风一来，春天就来了。', hint: '穿过山谷里的雾', setup: setupSpring, outro: '雾散了，山醒了。',
+  { key: 'spring', name: '立春', sub: '二月四日', intro: '立春。\n山里的雪，开始化了。', hint: '穿过山谷里的雾', setup: setupSpring, outro: '雾散了，山醒了。',
     particles: { fall: -0.3, drift: 0.8, size: 0.45, color: C('#fff4cf'), opacity: 0.55 }, scale: [62, 64, 66, 69, 71] },
-  { key: 'qingming', name: '清明', sub: '四月五日', intro: '清明。\n孩子们的风筝，在等一阵风。', hint: '飞近风筝，把它们托上天空', setup: setupQingming, outro: '风筝还在天上。\n日子，一天比一天长了。',
+  { key: 'qingming', name: '清明', sub: '四月五日', intro: '清明。\n孩子们的风筝，在等一阵风。', hint: '飞近风筝，把它们托上天空', setup: setupQingming, family: 'qingming', outro: '风筝还在天上。\n日子，一天比一天长了。',
     particles: { fall: 1.2, drift: 2.5, size: 0.9, color: C('#f6c6d0'), opacity: 0.85 }, scale: [60, 62, 64, 67, 69] },
-  { key: 'summer', name: '夏至', sub: '六月廿一', intro: '夏至，一年里白天最长的一天。\n河上的小船，等着风来鼓起帆。', hint: '飞过船边，送小船顺流而下', setup: setupSummer,
+  { key: 'summer', name: '夏至', sub: '六月廿一', intro: '夏至，一年里白天最长的一天。\n河上的小船，等着风来鼓起帆。', hint: '飞过船边，送小船顺流而下', setup: setupSummer, family: 'summer',
     particles: { fall: -0.2, drift: 1.4, size: 0.5, color: C('#ffffff'), opacity: 0.5 }, scale: [64, 67, 69, 72, 74],
     outro: '小船走远了。\n蝉声停下来的时候，秋天就到了。' },
-  { key: 'autumn', name: '秋分', sub: '九月廿三', intro: '秋分。\n稻子收了，晒谷场上的人在等一阵好风。', hint: '从扬谷的人身边吹过', setup: setupAutumn,
+  { key: 'autumn', name: '秋分', sub: '九月廿三', intro: '秋分。\n稻子收了，晒谷场上的人在等一阵好风。', hint: '从扬谷的人身边吹过', setup: setupAutumn, family: 'autumn',
     particles: { fall: 1.6, drift: 3, size: 1.0, color: C('#d98b3a'), opacity: 0.85 }, scale: [59, 62, 64, 66, 69],
     outro: '谷子进了仓。\n第一场雪，落在夜里。' },
-  { key: 'winter', name: '冬至', sub: '十二月廿一', intro: '冬至夜。\n村里的人，要把灯放给远方的人看。', hint: '飞近地上的灯，把它们送上夜空', setup: setupWinter,
+  { key: 'winter', name: '冬至', sub: '十二月廿一', intro: '冬至夜。\n村里的人，要把灯放给远方的人看。', hint: '飞近地上的灯，把它们送上夜空', setup: setupWinter, family: 'winter',
     particles: { fall: 5, drift: 1.5, size: 0.9, color: C('#ffffff'), opacity: 0.9 }, scale: [57, 60, 62, 64, 67] },
 ];
 
 // ---------------------------------------------------------------- flow
 let state = 'title', chapter = -1, now = 0;
-let palFrom = PALETTES.spring, palTo = PALETTES.spring, palT = 1;
+let palFrom = PALETTES.spring, palTo = PALETTES.spring, palT = 1, palDur = 5;
+let cine = null, glowFade = 1, glowTarget = 1, vigor = 1, deepT = 0, pinDone = false;
+const camLook = new THREE.Vector3(), _v = new THREE.Vector3();
+function toPalette(key, dur = 5) { palFrom = blendPal(pal, pal, 0); palTo = PALETTES[key]; palT = 0; palDur = dur; }
 const queue = []; // timed events
 function after(sec, fn) { queue.push({ t: now + sec, fn }); }
 
 function startChapter(i) {
   chapter = i; const ch = CHAPTERS[i];
-  palFrom = blendPal(pal, pal, 0); palTo = PALETTES[ch.key]; palT = 0;
+  toPalette(ch.key);
+  scene.remove(stage); stage = new THREE.Group(); scene.add(stage);
+  if (ch.family) setFamily(ch.family);
   sound.scale = ch.scale;
   pMode = ch.particles;
   setSeasonLabel(ch.name, ch.sub);
   showLine(ch.intro, 6.5);
   targets = ch.setup();
   setDots(targets.length, 0);
-  after(5, () => setHint(ch.hint));
+  after(5, () => { if (chapter === i && state === 'play') setHint(ch.hint); });
   state = 'play';
 }
 
@@ -996,15 +1109,7 @@ function finishChapter() {
       });
     });
     after(10, () => showLine('远方的人，也会看见。', 5));
-    after(17, () => {
-      $('season').style.opacity = 0;
-      const t = $('title'); t.querySelector('h1').textContent = '风物';
-      t.querySelector('.sub').textContent = '完';
-      t.querySelector('.how').innerHTML = '谢谢你来过';
-      t.querySelector('.go').textContent = '点击重新开始';
-      t.style.background = 'rgba(15,22,40,0.45)'; t.style.color = '#e6e1d2'; t.querySelector('h1').style.color = '#f0ebdc';
-      t.classList.remove('hide'); state = 'end';
-    });
+    after(17, startDeep);
   }
 }
 
@@ -1013,8 +1118,98 @@ $('title').addEventListener('click', () => {
   if (state !== 'title') return;
   $('title').classList.add('hide');
   try { sound.init(); } catch (e) { console.warn(e); }
-  startChapter(0);
+  startPrologue();
 });
+
+// ---------------------------------------------------------------- prologue: a pinwheel that will not turn
+function startPrologue() {
+  state = 'prologue'; setFamily('spring');
+  glowTarget = 0; glowFade = 0;
+  cine = { pos: OPENING.pos.clone(), look: OPENING.look.clone(), k: 0.9 };
+  after(6.5, () => showLine('“爷爷，它怎么不转？”', 4));
+  after(11, () => showLine('“等风来。\n风一来，春天就来了。”', 5.5));
+  after(17.5, () => {
+    // the wind arrives from behind the camera, heading for them
+    const dir = OPENING.look.clone().sub(OPENING.pos).setY(0).normalize();
+    player.pos.copy(OPENING.pos).addScaledVector(dir, 3).add(_v.set(0, 0.5, 0));
+    player.yaw = Math.atan2(-dir.x, -dir.z); player.pitch = -0.02; player.yawRate = 0; player.speed = 0;
+    camPos.copy(player.pos).addScaledVector(dir, -9).add(_v.set(0, 2.5, 0));
+    trailPts.forEach(p => p.copy(player.pos));
+    glowTarget = 1; cine = null; state = 'meet';
+    after(25, () => { if (state === 'meet') setHint('飞向那只风车'); });
+  });
+}
+function onPinwheel() {
+  pinDone = true; setHint(''); sound.chime(0);
+  girlReact = 3; girlReactCD = 8;
+  after(3.2, () => { // she runs off toward the valley with it
+    const to = FAM.at(7, 26);
+    girlRun = { from: famGirl.position.clone(), to, t: 0 };
+  });
+  after(4.5, () => startChapter(0));
+}
+
+// ---------------------------------------------------------------- 大寒: the wind grows old
+function startDeep() {
+  chapter = 5; state = 'deep'; deepT = 0; vigor = 1;
+  toPalette('deep', 6);
+  scene.remove(stage); stage = new THREE.Group(); scene.add(stage);
+  targets = []; setDots(0, 0); setHint('');
+  setFamily('deep');
+  pMode = { fall: 7, drift: 2.2, size: 1.0, color: C('#ffffff'), opacity: 0.95 };
+  sound.scale = [55, 57, 60, 62, 64];
+  setSeasonLabel('大寒', '一月二十日');
+  after(7, () => { $('season').style.opacity = 0; });
+  // what the year left behind: a boat moored by the bridge, haystacks, an old kite caught in the tree
+  const bz = VZ - 38, boat = new THREE.Group();
+  boat.add(figure(HULL));
+  const pv = new THREE.Group(); pv.position.set(1.3, 1.0, 0); pv.scale.y = 0.18; pv.add(new THREE.Mesh(SAIL, sailMat)); boat.add(pv);
+  boat.position.set(riverX(bz) + 5, WATER, bz); boat.rotation.y = Math.atan2(1, riverX(bz - 0.5) - riverX(bz + 0.5)) + 0.4;
+  stage.add(boat);
+  [[-20, 34], [-14, 44], [24, 58]].forEach(([dx, dz]) => {
+    const x = VX + dx, z = VZ + dz; if (Math.abs(x - riverX(z)) < 20) return;
+    const st = figure(stackGeo); st.position.set(x, H(x, z) - 0.2, z); stage.add(st);
+  });
+  const old = makeKite(kiteColors[0], kiteColors[1]);
+  old.position.copy(FAM.at(6.5, 1.5)).add(_v.set(0, 11.5, 0)); old.rotation.set(0.5, FAM.yaw + 0.4, 0.9); stage.add(old);
+}
+function startDissolve() {
+  state = 'dissolve'; glowTarget = 0; sound.windScale = 0.15;
+  cine = { pos: new THREE.Vector3(VX + 70, OLD.y + 150, VZ + 170), look: new THREE.Vector3(VX - 20, OLD.y, VZ - 10), k: 0.22 };
+  after(6, () => toPalette('dawn', 9));
+  after(9, () => { pMode = { ...pMode, opacity: 0 }; });
+  after(16, () => { // another spring, without you
+    toPalette('spring', 9);
+    pMode = { fall: -0.3, drift: 0.8, size: 0.45, color: C('#fff4cf'), opacity: 0.55 };
+    sound.scale = CHAPTERS[0].scale; sound.windScale = 0.5;
+    trees.forEach(t => { t.g = 0; t.gT = 0; }); paintTrees();
+    scene.remove(stage); stage = new THREE.Group(); scene.add(stage);
+    targets = setupSpring(); targets.forEach(t => t.beacon.visible = false);
+    setFamily('end'); pin2.target = 0;
+    setSeasonLabel('立春', '又一年');
+    targets.forEach((t, i) => after(4 + i * 1.8, () => { t.done = true; t.onTouch(); }));
+    after(4 + targets.length * 1.8 + 1, () => trees.forEach(t => t.gT = 1));
+  });
+  after(19, () => { cine = { pos: OPENING.pos.clone(), look: OPENING.look.clone(), k: 0.35 }; });
+  after(30, () => {
+    pin2.target = 1;
+    const x = riverX(OLD.z - 40) - 55, z = OLD.z - 40, y = H(x, z), kite = makeKite(kiteColors[2], kiteColors[4]);
+    kite.position.set(x, y + 1, z); stage.add(kite); let e = 0;
+    extras.push(dt => { e = Math.min(1, e + dt * 0.08); kite.position.y = y + 1 + (1 - Math.pow(1 - e, 3)) * 34 + Math.sin(now * 1.1) * 1.2;
+      kite.rotation.set(-1.2 * (1 - e), Math.sin(now * 0.4) * 0.4, Math.sin(now * 0.9) * 0.25); });
+  });
+  after(33, () => showLine('“风一来，春天就来了。”', 5));
+  after(40, () => showLine('没有人看见过风。', 4.5));
+  after(45.5, () => showLine('人们看见的，是万物。', 5.5));
+  after(53, () => {
+    $('season').style.opacity = 0;
+    const t = $('title'); t.querySelector('h1').textContent = '风物';
+    t.querySelector('.sub').innerHTML = '&nbsp;';
+    t.querySelector('.how').innerHTML = '谢谢你来过';
+    t.querySelector('.go').textContent = '点击重新开始';
+    t.classList.remove('hide'); state = 'end';
+  });
+}
 
 // ---------------------------------------------------------------- loop
 const clock = new THREE.Clock();
@@ -1043,7 +1238,7 @@ function step(dt) {
 
   // palette transition
   if (palT < 1) {
-    palT = Math.min(1, palT + dt / 5);
+    palT = Math.min(1, palT + dt / palDur);
     pal = blendPal(palFrom, palTo, smooth(0, 1, palT));
     applyPalette(); paintTerrain(); paintTrees();
   }
@@ -1056,10 +1251,14 @@ function step(dt) {
   input.kx = (k.ArrowRight || k.KeyD ? 1 : 0) - (k.ArrowLeft || k.KeyA ? 1 : 0);
   input.ky = (k.ArrowDown || k.KeyS ? 1 : 0) - (k.ArrowUp || k.KeyW ? 1 : 0);
   const active = state !== 'title';
+  const frozen = state === 'prologue' || state === 'dissolve' || state === 'end';
+  if (state === 'deep') { deepT += dt; vigor = Math.max(0.15, 1 - deepT / 70); }
+  const vk = state === 'deep' || state === 'dissolve' ? vigor : 1;
   let sx = input.kx || input.px, sy = input.ky || input.py;
   if (!active) { sx = 0.15; sy = 0; }
+  if (frozen) { sx = 0; sy = 0; }
   sx = Math.abs(sx) < 0.06 ? 0 : sx; sy = Math.abs(sy) < 0.06 ? 0 : sy;
-  player.yawRate = lerp(player.yawRate, -sx * 1.35, Math.min(1, dt * 3));
+  player.yawRate = lerp(player.yawRate, -sx * 1.35 * (0.35 + 0.65 * vk), Math.min(1, dt * 3));
   player.yaw += player.yawRate * dt;
   player.pitch = lerp(player.pitch, -sy * 0.7, Math.min(1, dt * 2.2));
   const r = Math.hypot(player.pos.x, player.pos.z);
@@ -1068,7 +1267,8 @@ function step(dt) {
     let diff = Math.atan2(Math.sin(want - player.yaw), Math.cos(want - player.yaw));
     player.yaw += diff * Math.min(1, dt * smooth(520, 640, r) * 1.6);
   }
-  player.speed = lerp(player.speed, input.boost && active ? 62 : 28, Math.min(1, dt * 1.5));
+  const cruise = state === 'meet' ? 7 : (input.boost && active && state !== 'deep' ? 62 : 28) * (0.3 + 0.7 * vk);
+  player.speed = lerp(player.speed, frozen ? 0 : cruise, Math.min(1, dt * 1.5));
   fwd.set(-Math.sin(player.yaw) * Math.cos(player.pitch), Math.sin(player.pitch), -Math.cos(player.yaw) * Math.cos(player.pitch));
   player.pos.addScaledVector(fwd, player.speed * dt);
   const ahead = Math.max(H(player.pos.x + fwd.x * 22, player.pos.z + fwd.z * 22), WATER) + 6;
@@ -1077,13 +1277,37 @@ function step(dt) {
   if (player.pos.y < ground) player.pos.y = ground;
   if (player.pos.y > 260) player.pos.y = lerp(player.pos.y, 260, dt * 2);
 
+  glowFade = lerp(glowFade, glowTarget, Math.min(1, dt * (glowTarget > glowFade ? 0.9 : 0.35)));
+  glowMat.opacity = glowFade; trailMat.uniforms.fade.value = glowFade * (0.25 + 0.75 * vk);
   glow.position.copy(player.pos);
-  glow.scale.setScalar(3.2 + Math.sin(now * 3) * 0.3);
+  glow.scale.setScalar((3.2 + Math.sin(now * 3) * 0.3) * (0.45 + 0.55 * vk));
   motes.forEach(o => {
     const a = now * o.sp + o.ph;
-    o.m.position.copy(player.pos).add(tmp.set(Math.cos(a) * o.r, Math.sin(a * 1.3) * o.r * 0.6, Math.sin(a) * o.r));
+    const r = o.r * (0.5 + 0.5 * vk);
+    o.m.position.copy(player.pos).add(tmp.set(Math.cos(a) * r, Math.sin(a * 1.3) * r * 0.6 - (1 - glowFade) * 3, Math.sin(a) * r));
   });
-  sun.position.copy(player.pos).addScaledVector(SUN_DIR, 400); sun.target.position.copy(player.pos);
+  const focus = cine ? camLook : player.pos;
+  sun.position.copy(focus).addScaledVector(SUN_DIR, 400); sun.target.position.copy(focus);
+
+  // the family: she looks around when the wind passes, but never at it
+  if (famGirl.visible) {
+    girlReactCD -= dt;
+    if (state !== 'prologue' && glowFade > 0.5 && girlReactCD <= 0 && player.pos.distanceTo(famGirl.position) < 14) { girlReact = 2.6; girlReactCD = 7; }
+    if (girlRun) {
+      girlRun.t = Math.min(1, girlRun.t + dt * 0.22);
+      famGirl.position.lerpVectors(girlRun.from, girlRun.to, girlRun.t);
+      famGirl.position.y = H(famGirl.position.x, famGirl.position.z) + Math.abs(Math.sin(now * 9)) * 0.25 * (girlRun.t < 1 ? 1 : 0);
+      famGirl.rotation.y = Math.atan2(girlRun.to.x - girlRun.from.x, girlRun.to.z - girlRun.from.z);
+    } else if (girlReact > 0) {
+      girlReact -= dt;
+      const away = Math.atan2(player.pos.x - famGirl.position.x, player.pos.z - famGirl.position.z) + Math.PI;
+      famGirl.rotation.y = lerp(famGirl.rotation.y, away + Math.sin(girlReact * 2.4) * 0.8, Math.min(1, dt * 3));
+    } else famGirl.rotation.y = lerp(famGirl.rotation.y, girlYaw, Math.min(1, dt * 1.5));
+  }
+  if (state === 'meet' && !pinDone) { pin.wheel.getWorldPosition(_v); if (player.pos.distanceTo(_v) < 13) onPinwheel(); }
+  if (pinDone) pin.target = player.pos.distanceTo(famGirl.position) < 22 ? 1 : 0.12;
+  for (const pw of [pin, pin2]) { pw.spin = lerp(pw.spin, pw.target, Math.min(1, dt * 0.8)); pw.wheel.rotation.z -= pw.spin * dt * 9; }
+  if (state === 'deep' && ((deepT > 20 && player.pos.distanceTo(famGirl.position) < 32) || deepT > 100)) startDissolve();
   waterTime.value = now;
   trailPts.pop(); trailPts.unshift(player.pos.clone().add(tmp.set(Math.sin(now * 7) * 0.4, Math.cos(now * 5) * 0.4, 0)));
   const tp = trailGeo.attributes.position;
@@ -1091,14 +1315,22 @@ function step(dt) {
   trailMat.uniforms.scale.value = innerHeight;
 
   // camera
-  const back = tmp.copy(fwd).setY(fwd.y * 0.5).normalize();
-  const desired = new THREE.Vector3().copy(player.pos).addScaledVector(back, -17).add(new THREE.Vector3(0, 5.5, 0));
-  camPos.lerp(desired, 1 - Math.exp(-dt * 3.2));
-  const cg = Math.max(H(camPos.x, camPos.z), WATER) + 2.5;
-  if (camPos.y < cg) camPos.y = cg;
-  camera.position.copy(camPos);
-  camera.lookAt(player.pos.x + fwd.x * 12, player.pos.y + fwd.y * 12 + 1, player.pos.z + fwd.z * 12);
-  camera.rotateZ(player.yawRate * 0.12);
+  if (cine) {
+    const k = 1 - Math.exp(-dt * cine.k);
+    camPos.lerp(cine.pos, k); camLook.lerp(cine.look, k);
+    camera.position.copy(camPos); camera.lookAt(camLook);
+  } else {
+    const back = tmp.copy(fwd).setY(fwd.y * 0.5).normalize();
+    const near = state === 'meet' ? 0.55 : 1;
+    const desired = new THREE.Vector3().copy(player.pos).addScaledVector(back, -17 * near).add(new THREE.Vector3(0, 5.5 * near, 0));
+    camPos.lerp(desired, 1 - Math.exp(-dt * 3.2));
+    const cg = Math.max(H(camPos.x, camPos.z), WATER) + 2.5;
+    if (camPos.y < cg) camPos.y = cg;
+    camera.position.copy(camPos);
+    camLook.set(player.pos.x + fwd.x * 12, player.pos.y + fwd.y * 12 + 1, player.pos.z + fwd.z * 12);
+    camera.lookAt(camLook);
+    camera.rotateZ(player.yawRate * 0.12);
+  }
   camera.fov = lerp(camera.fov, 60 + (player.speed - 28) * 0.25, dt * 2); camera.updateProjectionMatrix();
   sky.position.copy(camera.position); stars.position.copy(camera.position);
 
@@ -1108,13 +1340,14 @@ function step(dt) {
   // particles
   pMat.color.lerp(pMode.color, dt); pMat.size = lerp(pMat.size, pMode.size, dt);
   pMat.opacity = lerp(pMat.opacity, active ? pMode.opacity : 0, dt);
+  const pc = cine ? camPos : player.pos;
   for (let i = 0; i < PN; i++) {
     let x = pArr[i * 3], y = pArr[i * 3 + 1], z = pArr[i * 3 + 2];
     y -= pMode.fall * dt; x += Math.sin(now * 0.5 + i) * pMode.drift * dt; z += Math.cos(now * 0.4 + i * 1.3) * pMode.drift * dt;
     const h = PBOX / 2;
-    x = ((x - player.pos.x + h) % PBOX + PBOX) % PBOX - h + player.pos.x;
-    y = ((y - player.pos.y + h) % PBOX + PBOX) % PBOX - h + player.pos.y;
-    z = ((z - player.pos.z + h) % PBOX + PBOX) % PBOX - h + player.pos.z;
+    x = ((x - pc.x + h) % PBOX + PBOX) % PBOX - h + pc.x;
+    y = ((y - pc.y + h) % PBOX + PBOX) % PBOX - h + pc.y;
+    z = ((z - pc.z + h) % PBOX + PBOX) % PBOX - h + pc.z;
     pArr[i * 3] = x; pArr[i * 3 + 1] = y; pArr[i * 3 + 2] = z;
   }
   pGeo.attributes.position.needsUpdate = true;
@@ -1164,7 +1397,7 @@ function loop() {
 loop();
 
 // debug hook for testing
-window.__wind = { player, startChapter, counts: () => ({ trees: trees.length, shrubs: shrubs.length, tufts: tufts.length }), get targets() { return targets; }, get state() { return state; }, get chapter() { return chapter; }, step };
+window.__wind = { player, startChapter, startDeep, startDissolve, get vigor() { return vigor; }, famGirl, counts: () => ({ trees: trees.length, shrubs: shrubs.length, tufts: tufts.length }), get targets() { return targets; }, get state() { return state; }, get chapter() { return chapter; }, step };
 </script>
 </body>
 </html>
