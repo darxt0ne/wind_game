@@ -463,7 +463,8 @@ const rockMat = new THREE.MeshLambertMaterial({ flatShading: true });
 // village: whitewashed walls, dark tiled roofs with upturned eaves
 const village = new THREE.Vector3(VX, H(VX, VZ), VZ);
 const roofMat = new THREE.MeshLambertMaterial({ color: pal.roof.clone(), flatShading: true });
-const winMat = new THREE.MeshBasicMaterial({ color: pal.window.clone() });
+const winMat = new THREE.MeshBasicMaterial({ color: pal.window.clone() });   // a window with a lamp behind it at night
+const winDarkMat = new THREE.MeshBasicMaterial({ color: 0x4a4a46 });           // a window that stays dark
 function roofGeo(span, len) {
   const w = span / 2, sh = new THREE.Shape();
   sh.moveTo(-w - 0.9, 0.55); sh.quadraticCurveTo(-w * 0.45, 0.95, 0, 2.7);
@@ -502,11 +503,15 @@ const HOUSE_TYPES = [[8, 5.2, 3.6], [6.4, 4.8, 3.3], [10, 5.6, 3.9]].map(([L, D,
   D, body: houseBody(L, D, Hh), roof: houseRoof(L, D, Hh), win: [[-L * 0.3, 2.6, D / 2 + 0.1], [L * 0.3, 2.6, D / 2 + 0.1]] }));
 const winGeo = new THREE.PlaneGeometry(1.15, 1.05);
 const houseSpots = [];
-function addHouse(x, z, rotY, T) {
+// at night some households have a lamp lit and some have gone to bed; a lit house may still have one dark room
+function addHouse(x, z, rotY, T, lit = hash(Math.round(x * 10), Math.round(z * 10)) < 0.6, allOn = false) {
   const y = H(x, z), g = new THREE.Group(); g.position.set(x, y - 0.4, z); g.rotation.y = rotY;
   const b = new THREE.Mesh(T.body, kitMat), r = new THREE.Mesh(T.roof, roofMat);
   b.castShadow = b.receiveShadow = r.castShadow = r.receiveShadow = true; g.add(b, r);
-  T.win.forEach(p => { const w = new THREE.Mesh(winGeo, winMat); w.position.set(...p); g.add(w); });
+  T.win.forEach((p, i) => {
+    const on = lit && (allOn || hash(Math.round(x * 10) + i, Math.round(z * 10) - i) < 0.8);
+    const w = new THREE.Mesh(winGeo, on ? winMat : winDarkMat); w.position.set(...p); g.add(w);
+  });
   scene.add(g);
   const spot = { x, y, z, g, D: T.D }; houseSpots.push(spot); return spot;
 }
@@ -517,7 +522,7 @@ function addHouse(x, z, rotY, T) {
 const AWAY = Math.sign(OLD.x - riverX(OLD.z)) || 1;              // from the river toward the village
 const FACE_RIVER = Math.atan2(-AWAY, 0);                          // front of every house faces the river
 // her home: a small house just behind the old tree, facing the same way as everyone else's
-const HER_HOME = addHouse(OLD.x + AWAY * 10, OLD.z + 7, FACE_RIVER, HOUSE_TYPES[1]);
+const HER_HOME = addHouse(OLD.x + AWAY * 10, OLD.z + 7, FACE_RIVER, HOUSE_TYPES[1], true, true); // her family's lamp is always lit
 for (let row = 0; row < 3; row++) {
   const back = 30 + row * 14, stagger = row % 2 ? 6.5 : 0;
   for (let z = VZ - 58 + stagger; z < VZ + 60; z += 12.5 + rand() * 2.5) {
@@ -1023,50 +1028,123 @@ const FAM = (() => {
 })();
 const HAIR = '#2b2725', WHITE = '#e6e3dc', SKIN = '#ecd0b4';
 const xf = (g, [x, y, z], [rx = 0, ry = 0, rz = 0] = [], sc = 1) => { g.scale(sc, sc, sc); g.rotateZ(rz); g.rotateX(rx); g.rotateY(ry); g.translate(x, y, z); return g; };
-const geoGrandpaSit = merge([
-  part(BOX(0.3, 0.28, 0.9), '#3b3a44', [-0.2, 0.74, 0.4]), part(BOX(0.3, 0.28, 0.9), '#3b3a44', [0.2, 0.74, 0.4]),
-  part(BOX(0.26, 0.65, 0.26), '#3b3a44', [-0.2, 0.35, 0.82]), part(BOX(0.26, 0.65, 0.26), '#3b3a44', [0.2, 0.35, 0.82]),
-  part(CYL(0.4, 0.56, 1.15, 7), '#5d6470', [0, 1.45, 0], [-0.08, 0, 0]),
-  part(CYL(0.1, 0.12, 0.8, 5), '#5d6470', [-0.45, 1.25, 0.35], [0.9, 0, 0]), part(CYL(0.1, 0.12, 0.8, 5), '#5d6470', [0.45, 1.25, 0.35], [0.9, 0, 0]),
-  part(new THREE.IcosahedronGeometry(0.38, 1), SKIN, [0, 2.35, 0.05]),
-  part(new THREE.IcosahedronGeometry(0.41, 1), WHITE, [0, 2.47, -0.03], [0, 0, 0], [1, 0.7, 1]),
-  part(new THREE.IcosahedronGeometry(0.19, 0), WHITE, [0, 2.12, 0.3]),
-]);
-const geoGrandpaStand = merge([
-  part(CYL(0.15, 0.17, 0.95, 5), '#3b3a44', [-0.22, 0.48, 0]), part(CYL(0.15, 0.17, 0.95, 5), '#3b3a44', [0.22, 0.48, 0]),
-  part(CYL(0.42, 0.6, 1.35, 7), '#5d6470', [0, 1.6, 0]),
-  part(CYL(0.1, 0.12, 0.85, 5), '#5d6470', [0.5, 1.6, 0.15], [0.3, 0, 0.25]),
-  part(CYL(0.1, 0.12, 0.85, 5), '#5d6470', [-0.5, 1.6, 0], [0, 0, -0.2]),
-  part(new THREE.IcosahedronGeometry(0.38, 1), SKIN, [0, 2.55, 0]),
-  part(new THREE.IcosahedronGeometry(0.41, 1), WHITE, [0, 2.67, -0.08], [0, 0, 0], [1, 0.7, 1]),
-  part(new THREE.IcosahedronGeometry(0.19, 0), WHITE, [0, 2.32, 0.28]),
-  part(CYL(0.05, 0.05, 2.3, 4), '#7a5a3c', [0.62, 1.12, 0.38]),
-]);
-function geoGirl(coat, sit, older) {
-  const y = sit ? -0.6 : 0, parts = [];
-  if (sit) parts.push(part(BOX(0.26, 0.24, 0.85), '#3b3a44', [-0.18, 0.12, 0.42]), part(BOX(0.26, 0.24, 0.85), '#3b3a44', [0.18, 0.12, 0.42]));
-  else parts.push(part(CYL(0.13, 0.15, 0.8, 5), '#3b3a44', [-0.18, 0.4, 0]), part(CYL(0.13, 0.15, 0.8, 5), '#3b3a44', [0.18, 0.4, 0]));
-  parts.push(
-    part(CYL(0.36, 0.56, 1.15, 7), coat, [0, 1.35 + y, 0]),
-    part(CYL(0.09, 0.1, 0.75, 5), coat, [0.48, 1.85 + y, 0.12], [0.3, 0, -0.6]),
-    part(CYL(0.09, 0.1, 0.7, 5), coat, [-0.42, 1.38 + y, 0], [0, 0, 0.35]),
-    part(new THREE.IcosahedronGeometry(0.4, 1), SKIN, [0, 2.25 + y, 0]),
-    part(new THREE.IcosahedronGeometry(0.42, 1), HAIR, [0, 2.36 + y, -0.07], [0, 0, 0], [1, 0.8, 1]),
-    ...(older ? [part(CYL(0.09, 0.15, 0.95, 5), HAIR, [0, 1.95 + y, -0.42], [0.25, 0, 0])]
-             : [part(ICO(0.17), HAIR, [-0.33, 2.55 + y, -0.05]), part(ICO(0.17), HAIR, [0.33, 2.55 + y, -0.05])]));
-  return merge(parts);
+// ---- people, built joint by joint: tapered limbs between shoulder, elbow and hand, hip, knee and ankle,
+// with round joints, hands, cloth shoes, a padded jacket with a placket and knot buttons, and a small face
+const _q = new THREE.Quaternion(), _yUp = new THREE.Vector3(0, 1, 0), _ld = new THREE.Vector3();
+function limb(a, b, ra, rb, color, seg = 7) { // a tapered cylinder from point a (radius ra) to point b (radius rb)
+  _ld.set(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+  const g = new THREE.CylinderGeometry(rb, ra, _ld.length(), seg);
+  g.applyQuaternion(_q.setFromUnitVectors(_yUp, _ld.normalize()));
+  g.translate((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2);
+  return bake(g, color);
 }
-const pinMat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, flatShading: true });
+const ball = (p, r, color, s = [1, 1, 1]) => part(new THREE.IcosahedronGeometry(r, 1), color, p, [], s);
+function legParts(sp, L) { // one trouser leg, hip -> knee -> ankle, and a cloth shoe with a pale sole
+  return [
+    limb(L[0], L[1], sp.thigh, sp.thigh * 0.85, sp.trousers), ball(L[1], sp.thigh * 0.85, sp.trousers),
+    limb(L[1], L[2], sp.thigh * 0.85, sp.thigh * 0.72, sp.trousers),
+    part(BOX(sp.foot[0], sp.foot[1], sp.foot[2]), sp.shoe, [L[2][0], L[2][1] - sp.foot[1] * 0.35, L[2][2] + sp.foot[2] * 0.25]),
+    part(BOX(sp.foot[0] * 1.02, sp.foot[1] * 0.25, sp.foot[2] * 1.02), '#d9d2c4', [L[2][0], L[2][1] - sp.foot[1] * 0.78, L[2][2] + sp.foot[2] * 0.25]),
+  ];
+}
+function body(sp) {
+  const P = [], t = sp.torso, hz = sp.headZ || 0;
+  for (const L of sp.legs || []) P.push(...legParts(sp, L));
+  // the padded jacket, a little flared at the hem
+  P.push(part(CYL(t.r1, t.r0, t.y1 - t.y0, 10), sp.coat, [0, (t.y0 + t.y1) / 2, t.z || 0], [t.lean || 0, 0, 0]));
+  P.push(part(CYL(t.r0 * 1.02, t.r0 * 1.04, 0.07, 10), sp.trim, [0, t.y0 + 0.035, t.z || 0], [t.lean || 0, 0, 0])); // hem binding
+  const rAt = f => t.r1 + (t.r0 - t.r1) * f; // jacket radius, f = 0 at the shoulders, 1 at the hem
+  P.push(part(BOX(0.045, (t.y1 - t.y0) * 0.9, 0.03), sp.trim, [0.07, (t.y0 + t.y1) / 2, rAt(0.5) + (t.z || 0)], [t.lean || 0, 0, 0])); // placket
+  for (let i = 0; i < 3; i++) { const f = 0.18 + i * 0.22; P.push(ball([0.12, t.y1 - (t.y1 - t.y0) * f, rAt(f) + 0.02 + (t.z || 0)], 0.035, sp.trim)); }
+  P.push(part(CYL(sp.neck * 1.7, sp.neck * 2.2, 0.12, 10), sp.coat, [0, t.y1 + 0.03, hz * 0.4])); // standing collar
+  P.push(limb([0, t.y1, hz * 0.3], [0, sp.headY - sp.headR * 0.75, hz], sp.neck * 1.1, sp.neck, SKIN));
+  // head and face
+  const hy = sp.headY, hr = sp.headR;
+  P.push(ball([0, hy, hz], hr, SKIN, [0.94, 1.04, 0.98]));
+  for (const sx of [-1, 1]) {
+    P.push(part(BOX(hr * 0.13, hr * 0.14, 0.02), '#2a2422', [sx * hr * 0.33, hy + hr * 0.06, hz + hr * 0.92]));            // eyes
+    P.push(part(BOX(hr * 0.3, hr * 0.06, 0.03), sp.brow, [sx * hr * 0.33, hy + hr * 0.28, hz + hr * 0.88], [0, 0, sx * 0.12])); // brows
+    P.push(ball([sx * hr * 0.95, hy, hz], hr * 0.16, SKIN, [0.5, 1, 0.8]));                                                    // ears
+  }
+  P.push(part(BOX(hr * 0.14, hr * 0.22, hr * 0.16), '#dcb596', [0, hy - hr * 0.1, hz + hr * 0.97]));                          // nose
+  P.push(part(BOX(hr * 0.26, hr * 0.04, 0.02), '#b56f62', [0, hy - hr * 0.42, hz + hr * 0.86]));                              // mouth
+  if (sp.hair === 'white') { // white hair round the back and sides, white beard
+    P.push(ball([0, hy + hr * 0.2, hz - hr * 0.24], hr * 1.04, WHITE, [1, 0.8, 1]));
+    P.push(ball([0, hy - hr * 0.62, hz + hr * 0.55], hr * 0.42, WHITE, [1.1, 1, 0.75]));
+  } else { // dark hair with a fringe, two buns tied with red cord
+    P.push(ball([0, hy + hr * 0.24, hz - hr * 0.2], hr * 1.05, HAIR, [1, 0.84, 1]));
+    P.push(part(BOX(hr * 1.3, hr * 0.24, hr * 0.3), HAIR, [0, hy + hr * 0.6, hz + hr * 0.66]));
+    for (const sx of [-1, 1]) { P.push(ball([sx * hr * 0.8, hy + hr * 0.62, hz - hr * 0.1], hr * 0.34, HAIR), ball([sx * hr * 0.6, hy + hr * 0.42, hz - hr * 0.05], hr * 0.1, '#c33a33')); }
+  }
+  for (const A of sp.arms || []) { // sleeves, cuffs and hands
+    P.push(ball(A[0], sp.arm * 1.25, sp.coat), limb(A[0], A[1], sp.arm * 1.15, sp.arm, sp.coat), ball(A[1], sp.arm, sp.coat),
+      limb(A[1], A[2], sp.arm, sp.arm * 0.95, sp.coat));
+    P.push(ball(A[2], sp.hand, SKIN, [0.9, 1.1, 0.9]));
+  }
+  (sp.extra || []).forEach(e => P.push(e));
+  return merge(P);
+}
+const OLD_MAN = { coat: '#5d6470', trim: '#3a3f48', trousers: '#3b3a44', shoe: '#2a2420', foot: [0.22, 0.14, 0.42], thigh: 0.15,
+  neck: 0.1, headR: 0.3, brow: WHITE, hair: 'white', arm: 0.1, hand: 0.1 };
+const geoGrandpaStand = body({ ...OLD_MAN, torso: { y0: 1.02, y1: 2.2, r0: 0.5, r1: 0.37 }, headY: 2.6,
+  legs: [[[0.17, 1.25, 0], [0.18, 0.68, 0.04], [0.18, 0.16, 0]], [[-0.17, 1.25, 0], [-0.18, 0.68, 0.02], [-0.18, 0.16, 0]]],
+  arms: [[[0.44, 2.08, 0], [0.56, 1.68, 0.16], [0.6, 1.4, 0.38]], [[-0.44, 2.08, 0], [-0.52, 1.62, 0.04], [-0.5, 1.2, 0.1]]],
+  extra: [limb([0.63, 0.0, 0.48], [0.6, 1.42, 0.38], 0.035, 0.032, '#7a5a3c'), limb([0.6, 1.42, 0.38], [0.48, 1.5, 0.38], 0.035, 0.035, '#7a5a3c')] });
+const geoGrandpaSit = body({ ...OLD_MAN, torso: { y0: 0.66, y1: 1.8, r0: 0.5, r1: 0.37, lean: 0.08, z: 0.06 }, headY: 2.16, headZ: 0.1,
+  legs: [[[0.17, 0.74, 0.05], [0.19, 0.76, 0.58], [0.19, 0.16, 0.64]], [[-0.17, 0.74, 0.05], [-0.19, 0.76, 0.58], [-0.19, 0.16, 0.64]]],
+  arms: [[[0.44, 1.68, 0.08], [0.5, 1.24, 0.28], [0.3, 0.92, 0.52]], [[-0.44, 1.68, 0.08], [-0.5, 1.24, 0.28], [-0.3, 0.92, 0.52]]] });
+// the girl: a child's proportions, red padded jacket
+const GIRL = { coat: '#c0504a', trim: '#8c2f2b', trousers: '#3b3a44', shoe: '#3a2a24', foot: [0.18, 0.12, 0.32], thigh: 0.13,
+  neck: 0.09, headR: 0.4, headY: 2.22, brow: HAIR, hair: 'dark', arm: 0.09, hand: 0.09, torso: { y0: 0.72, y1: 1.82, r0: 0.48, r1: 0.32 } };
+const GIRL_LEGS = [[[0.15, 0.8, 0], [0.16, 0.45, 0.03], [0.16, 0.14, 0]], [[-0.15, 0.8, 0], [-0.16, 0.45, 0.02], [-0.16, 0.14, 0]]];
+const GIRL_ARMS_DOWN = [[[0.34, 1.74, 0], [0.42, 1.42, 0.04], [0.42, 1.12, 0.1]], [[-0.34, 1.74, 0], [-0.42, 1.42, 0.04], [-0.42, 1.12, 0.1]]];
+const geoGirlStand = body({ ...GIRL, legs: GIRL_LEGS, arms: GIRL_ARMS_DOWN });
+const geoGirlRaise = body({ ...GIRL, legs: GIRL_LEGS, arms: [[[0.34, 1.74, 0], [0.54, 1.6, 0.18], [0.5, 1.92, 0.3]], GIRL_ARMS_DOWN[1]] }); // holding up the pinwheel
+const geoGirlSit = body({ ...GIRL, torso: { y0: 0.15, y1: 1.22, r0: 0.48, r1: 0.32 }, headY: 1.62,
+  legs: [[[0.15, 0.24, 0.02], [0.17, 0.56, 0.42], [0.17, 0.14, 0.72]], [[-0.15, 0.24, 0.02], [-0.17, 0.56, 0.42], [-0.17, 0.14, 0.72]]],
+  arms: [[[0.34, 1.14, 0], [0.38, 0.86, 0.3], [0.2, 0.64, 0.5]], [[-0.34, 1.14, 0], [-0.38, 0.86, 0.3], [-0.2, 0.64, 0.5]]] });
+
+// ---- the pinwheel, made the way a paper one is made: a square of paper cut from each corner along the
+// diagonals toward the centre, and one corner of each of the four triangles folded in to the pin.
+// From the front it reads as a four-pointed star: each vane keeps one sharp corner pointing outward, flat,
+// while its other half rolls round in a smooth cone back to the pin. Coloured right through, with a soft
+// sheen, and smooth rather than faceted: the one thing in this low-poly valley that is.
+const PIN_A = 0.62;                                                 // half the side of the paper square
+const PIN_COLORS = ['#ef5a2a', '#2c6fe0', '#33b84a', '#f6cf24'];     // orange, blue, green, yellow, round the wheel
+const PIN_VANE = (() => {
+  // the triangle from the centre to two neighbouring corners: w = 0 at the corner that stays flat and points out,
+  // w = 1 at the corner that is folded in to the pin
+  const C0 = [PIN_A, PIN_A], C1 = [-PIN_A, PIN_A], NS = 28, NW = 24, pos = [], idx = [];
+  for (let i = 0; i <= NS; i++) for (let j = 0; j <= NW; j++) {
+    const s = i / NS, w = j / NW;
+    let x = s * (C0[0] + w * (C1[0] - C0[0])), y = s * (C0[1] + w * (C1[1] - C0[1]));
+    const f = s * smooth(0.2, 1, w);                                 // how far this bit of paper is rolled over:
+    const k = 1 - 0.9 * Math.pow(f, 1.25);                           //   drawn in toward the centre as it goes...
+    x *= k; y *= k;
+    pos.push(x, y, 0.5 * PIN_A * Math.sin(f * Math.PI * 0.95) * (0.35 + 0.65 * s)); // ...and bulging out toward the front
+  }
+  for (let i = 0; i < NS; i++) for (let j = 0; j < NW; j++) {
+    const a = i * (NW + 1) + j, b = a + 1, c = a + NW + 1, d = c + 1;
+    idx.push(a, c, b, b, c, d);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx);
+  g.computeVertexNormals();                                          // smooth shading across the curve
+  return g;
+})();
+const PIN_VANES = [0, 1, 2, 3].map(i => PIN_VANE.clone().rotateZ(-i * Math.PI / 2));
+const pinPaper = PIN_COLORS.map(c => new THREE.MeshPhongMaterial({ color: c, side: THREE.DoubleSide, shininess: 28, specular: 0x2a2a2a }));
+const pinWood = new THREE.MeshPhongMaterial({ color: 0xd9a874, shininess: 18, specular: 0x1c1c1c });
+const pinBead = new THREE.MeshPhongMaterial({ color: 0xe0b07a, shininess: 40, specular: 0x333333 });
+const PIN_STICK = new THREE.CylinderGeometry(0.03, 0.034, 1.6, 20).translate(0, 0.8, 0);
+const PIN_BEAD_FRONT = new THREE.SphereGeometry(0.07, 20, 14).translate(0, 0, 0.05);
+const PIN_BEAD_BACK = new THREE.SphereGeometry(0.05, 16, 12).translate(0, 0, -0.05);
 function makePinwheel() {
-  const g = new THREE.Group();
-  g.add(new THREE.Mesh(merge([part(CYL(0.03, 0.03, 1.5, 4), '#8a6a4a', [0, 0.75, 0])]), kitMat));
-  const wheel = new THREE.Group(); wheel.position.set(0, 1.5, 0.06); g.add(wheel);
-  const blade = new THREE.Shape(); blade.moveTo(0, 0); blade.lineTo(0.62, 0.06); blade.lineTo(0.5, 0.52); blade.closePath();
-  const cols = ['#d9534f', '#f0b429', '#3f7cbf', '#5aa36a'];
-  wheel.add(new THREE.Mesh(merge([
-    ...cols.map((c, i) => part(new THREE.ShapeGeometry(blade), c, [0, 0, 0], [0, 0, i * Math.PI / 2])),
-    part(new THREE.IcosahedronGeometry(0.08, 0), '#f4efe2', [0, 0, 0.03]),
-  ]), pinMat));
+  const g = new THREE.Group(), shadowed = m => { m.castShadow = true; return m; };
+  g.add(shadowed(new THREE.Mesh(PIN_STICK, pinWood)));
+  const wheel = new THREE.Group(); wheel.position.set(0, 1.5, 0.08); g.add(wheel);
+  PIN_VANES.forEach((v, i) => wheel.add(shadowed(new THREE.Mesh(v, pinPaper[i]))));
+  wheel.add(new THREE.Mesh(PIN_BEAD_FRONT, pinBead), new THREE.Mesh(PIN_BEAD_BACK, pinBead));
   return { g, wheel, spin: 0, target: 0 };
 }
 function figure(geo, scale = 1) { const m = new THREE.Mesh(geo, kitMat); m.castShadow = true; m.scale.setScalar(scale); return m; }
@@ -1082,13 +1160,21 @@ const famStool = figure((() => {
   ];
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) // legs, each leaning slightly outward
     parts.push(part(CYL(0.038, 0.05, 0.56, 6), sx * sz > 0 ? '#6b4e33' : '#664a30', [sx * 0.37, 0.28, sz * 0.33], [sz * 0.06, 0, -sx * 0.06]));
+  // the back: the rear legs carry on up as two posts leaning a little back, a curved top rail across them,
+  // one upright splat in the middle and a low rail under it
+  for (const sx of [-1, 1]) parts.push(limb([sx * 0.36, 0.56, -0.36], [sx * 0.35, 1.52, -0.5], 0.042, 0.034, '#6b4e33'));
+  parts.push(part(BOX(0.86, 0.075, 0.07), '#7d5c3e', [0, 1.5, -0.5], [0.15, 0, 0]),                  // top rail
+    part(BOX(0.94, 0.04, 0.05), '#7d5c3e', [0, 1.55, -0.51], [0.15, 0, 0]),                           // its slightly longer cap
+    part(BOX(0.3, 0.62, 0.035), '#86643f', [0, 1.12, -0.45], [0.15, 0, 0]),                            // splat
+    part(BOX(0.7, 0.05, 0.04), '#6a4c32', [0, 0.78, -0.4], [0.15, 0, 0]));                             // low rail
   return merge(parts);
 })());
 const famGrandpa = new THREE.Group(), gpSit = figure(geoGrandpaSit), gpStand = figure(geoGrandpaStand);
 famGrandpa.add(gpSit, gpStand);
-const famGirl = new THREE.Group(), girlStand = figure(geoGirl('#c0504a', false), 0.75), girlSit = figure(geoGirl('#c0504a', true), 0.75);
-famGirl.add(girlStand, girlSit);
-const pin = makePinwheel(); pin.g.position.set(0.5, 1.0, 0.3); pin.g.scale.setScalar(1.3); girlStand.add(pin.g); pin.g.scale.setScalar(1.3 / 0.75);
+const famGirl = new THREE.Group(), girlStand = figure(geoGirlStand, 0.75), girlSit = figure(geoGirlSit, 0.75), girlRaise = figure(geoGirlRaise, 0.75);
+famGirl.add(girlStand, girlSit, girlRaise);
+// the pinwheel's stick runs up through her raised hand
+const pin = makePinwheel(); pin.g.position.set(0.5, 1.0, 0.3); girlRaise.add(pin.g); pin.g.scale.setScalar(1.3 / 0.75);
 [famStool, famGrandpa, famGirl].forEach(o => { o.rotation.y = FAM.yaw; scene.add(o); });
 famStool.position.copy(FAM.stool);
 const stoolSnow = figure(merge([ // a soft cap of snow on the seat, a little on the stretchers
@@ -1115,7 +1201,8 @@ function setFamily(mode) {
   famStool.position.copy(stool); famStool.rotation.y = yaw;
   famGrandpa.visible = !!M[0]; gpSit.visible = M[0] === 'sit'; gpStand.visible = M[0] === 'stand';
   famGrandpa.position.copy(gp); famGrandpa.rotation.y = yaw;
-  famGirl.visible = !!M[1]; girlStand.visible = M[1] === 'stand'; girlSit.visible = M[1] === 'sit';
+  famGirl.visible = !!M[1]; girlSit.visible = M[1] === 'sit';
+  girlRaise.visible = M[1] === 'stand' && M[2]; girlStand.visible = M[1] === 'stand' && !M[2]; // with the pinwheel she holds it up
   famGirl.position.copy(girl); famGirl.rotation.y = girlYaw = yaw;
   pin.g.visible = M[2];
   stoolSnow.visible = stoolPin.g.visible = mode === 'winter';
@@ -1233,17 +1320,14 @@ let lastPhase = 0, herLantern = null, treeSpeed = 0.5;
 // a girl who can actually walk: legs on hip pivots, both hands holding the lantern in front of her
 function makeWalker() {
   const g = new THREE.Group();
-  g.add(figure(merge([
-    part(CYL(0.36, 0.56, 1.15, 7), '#c0504a', [0, 1.35, 0]),
-    part(new THREE.IcosahedronGeometry(0.4, 1), SKIN, [0, 2.25, 0]),
-    part(new THREE.IcosahedronGeometry(0.42, 1), HAIR, [0, 2.36, -0.07], [0, 0, 0], [1, 0.8, 1]),
-    part(ICO(0.17), HAIR, [-0.33, 2.55, -0.05]), part(ICO(0.17), HAIR, [0.33, 2.55, -0.05]),
-    part(CYL(0.09, 0.1, 0.72, 5), '#c0504a', [0.28, 1.6, 0.34], [2.04, 0, 0.18]),
-    part(CYL(0.09, 0.1, 0.72, 5), '#c0504a', [-0.28, 1.6, 0.34], [2.04, 0, -0.18]),
-  ])));
-  const legs = [-0.18, 0.18].map(x => {
+  // upper body: both hands under the rim of the lantern she carries in front of her
+  g.add(figure(body({ ...GIRL, legs: [],
+    arms: [[[0.34, 1.74, 0], [0.44, 1.3, 0.3], [0.4, 0.98, 0.7]], [[-0.34, 1.74, 0], [-0.44, 1.3, 0.3], [-0.4, 0.98, 0.7]]] })));
+  // each leg hangs from its own hip joint so it can swing: thigh, knee, shin and shoe
+  const legGeo = merge(legParts(GIRL, [[0, 0, 0], [0.01, -0.35, 0.03], [0.01, -0.66, 0]]));
+  const legs = [-0.15, 0.15].map(x => {
     const hip = new THREE.Group(); hip.position.set(x, 0.8, 0);
-    hip.add(figure(merge([part(CYL(0.13, 0.15, 0.8, 5), '#3b3a44', [0, -0.4, 0])]))); g.add(hip); return hip;
+    hip.add(figure(legGeo)); g.add(hip); return hip;
   });
   g.scale.setScalar(0.75); g.userData.legs = legs;
   return g;
