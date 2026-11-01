@@ -619,7 +619,7 @@ const trailMat = new THREE.ShaderMaterial({
   vertexShader: `attribute float aAge; varying float vA; uniform float scale;
     void main(){ vA = aAge; vec4 mv = modelViewMatrix*vec4(position,1.); gl_PointSize = min((1.6 - aAge*1.3) * scale * 0.9 / -mv.z, scale * 0.06); gl_Position = projectionMatrix*mv; }`,
   fragmentShader: `uniform vec3 col; uniform float fade; varying float vA;
-    void main(){ float d = length(gl_PointCoord - .5); float a = smoothstep(.5, 0., d) * (1. - vA) * .5 * fade; gl_FragColor = vec4(col, a); }`,
+    void main(){ float d = length(gl_PointCoord - .5); float a = (1. - smoothstep(0., .5, d)) * (1. - vA) * .5 * fade; /* edge0 < edge1: reversed edges are undefined in GLSL and come out as coloured noise on Apple GPUs */ gl_FragColor = vec4(col, a); }`,
 });
 const trail = new THREE.Points(trailGeo, trailMat); trail.frustumCulled = false; trail.renderOrder = 9; scene.add(trail);
 
