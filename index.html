@@ -1091,7 +1091,9 @@ function body(sp) {
 function headParts(sp) { // head, face and hair
   const P = [], hy = sp.headY, hr = sp.headR, hz = sp.headZ || 0;
   const at = (x, y, z) => [x * hr, hy + y * hr, hz + z * hr];   // positions in head radii from the head's centre
-  P.push(ball([0, hy, hz], hr, SKIN, sp.face === 'child' ? [0.98, 1, 0.98] : [0.94, 1.04, 0.98]));
+  // not a ball: a face narrower than it is tall, with a jaw that tapers to a chin
+  if (sp.face === 'child') P.push(ball([0, hy, hz], hr, SKIN, [0.9, 1.0, 0.94]), ball(at(0, -0.42, 0.2), hr * 0.56, SKIN, [1, 0.9, 0.9]));
+  else P.push(ball([0, hy, hz], hr, SKIN, [0.86, 1.1, 0.94]), ball(at(0, -0.5, 0.16), hr * 0.6, SKIN, [1, 0.95, 0.9]));
   for (const sx of [-1, 1]) P.push(ball(at(sx * 0.95, 0, 0), hr * 0.16, SKIN, [0.5, 1, 0.8]));                                  // ears
   if (sp.face === 'child') { // big dark eyes with a catch-light, thin arched brows, pink cheeks, a small smile
     for (const sx of [-1, 1]) {
@@ -1122,16 +1124,22 @@ function headParts(sp) { // head, face and hair
       P.push(part(CYL(hr * 0.95, hr * 0.95, hr * 0.13, 12), '#3b2e24', at(0, 0.53, -0.05)));
       P.push(part(CYL(hr * 1.28, hr * 1.28, hr * 0.06, 14), '#5a4636', at(0, 0.47, -0.02), [-0.08, 0, 0]));
     }
-  } else { // short dark hair hanging straight down to her jaw, a soft fringe, a little red clip on one side
-    P.push(ball(at(0, 0.22, -0.18), hr * 1.06, HAIR, [1, 0.86, 1]));                    // crown
-    P.push(ball(at(0, -0.08, -0.24), hr * 1.08, HAIR, [1.06, 0.72, 0.96]));             // the back, falling to the nape
-    for (const sx of [-1, 0, 1]) P.push(part(BOX(hr * 0.5, hr * 0.32, hr * 0.3), HAIR, at(sx * 0.4, 0.55, 0.72), [0.2, 0, -sx * 0.1])); // fringe
+  } else { // dark hair: a straight-cut fringe, the sides falling to her jaw, and a full ponytail up on one side tied with red string
+    P.push(ball(at(0, 0.22, -0.18), hr * 1.04, HAIR, [0.96, 0.86, 1]));                 // crown
+    P.push(ball(at(0, 0.0, -0.26), hr * 1.02, HAIR, [1.0, 0.66, 0.94]));                // the back, short, to the nape
+    P.push(part(BOX(hr * 1.42, hr * 0.38, hr * 0.36), HAIR, at(0, 0.5, 0.7), [0.18, 0, 0])); // fringe, cut straight across above the brows
     for (const sx of [-1, 1]) {
-      P.push(part(BOX(hr * 0.28, hr * 0.95, hr * 0.5), HAIR, at(sx * 0.82, -0.25, 0.22), [0, 0, sx * 0.08]));  // the sides, down past the ears
-      P.push(part(BOX(hr * 0.3, hr * 0.12, hr * 0.5), HAIR, at(sx * 0.9, -0.72, 0.22), [0, 0, -sx * 0.35])); // ends turning out a little at the jaw
+      P.push(part(BOX(hr * 0.26, hr * 0.98, hr * 0.5), HAIR, at(sx * 0.78, -0.24, 0.26), [0, 0, sx * 0.06]));  // the sides, framing her face down to the jaw
+      P.push(part(BOX(hr * 0.28, hr * 0.1, hr * 0.48), HAIR, at(sx * 0.83, -0.72, 0.26), [0, 0, -sx * 0.3])); // ends turning in toward the chin
     }
-    P.push(ball(at(-0.62, 0.52, 0.58), hr * 0.07, '#d8343a'),                            // the clip: a tiny red bow above one temple
-      ball(at(-0.74, 0.55, 0.52), hr * 0.1, '#d8343a', [1.2, 0.7, 0.4]), ball(at(-0.5, 0.55, 0.62), hr * 0.1, '#d8343a', [1.2, 0.7, 0.4]));
+    // the ponytail: gathered high on her right, full where it's tied, curving out and down
+    const tail = [[0.78, 0.62, -0.3, 0.26], [1.06, 0.74, -0.38, 0.3], [1.4, 0.64, -0.42, 0.32], [1.64, 0.32, -0.42, 0.28],
+      [1.7, -0.06, -0.38, 0.22], [1.62, -0.44, -0.34, 0.16], [1.48, -0.76, -0.3, 0.09]];
+    for (let s = 0; s < tail.length - 1; s++) for (let k = 0; k < 3; k++) {
+      const u = k / 3, a = tail[s], b = tail[s + 1];
+      P.push(ball(at(a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u), hr * (a[3] + (b[3] - a[3]) * u), HAIR));
+    }
+    P.push(part(CYL(hr * 0.2, hr * 0.2, hr * 0.13, 10), '#d8343a', at(0.86, 0.65, -0.32), [0, 0, -1.1])); // red string round it
   }
   return P;
 }
