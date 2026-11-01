@@ -27,6 +27,19 @@
   #edge { position: fixed; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; pointer-events: none;
     background: radial-gradient(circle, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.4) 45%, rgba(255,255,255,0) 72%);
     box-shadow: 0 0 14px rgba(255,255,255,0.8); opacity: 0; transition: opacity 0.5s; }
+  #ending { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    color: #ece5d3; pointer-events: none; cursor: pointer; text-shadow: 0 0 16px rgba(10,14,30,0.7); }
+  #ending::before { content: ''; position: absolute; inset: 0; opacity: 0; transition: opacity 4s ease;
+    background: radial-gradient(ellipse 46% 52% at 50% 50%, rgba(8,12,26,0.55), rgba(8,12,26,0)); }
+  #ending.shade::before { opacity: 1; }
+  #ending > * { position: relative; opacity: 0; transform: translateY(6px); transition: opacity 2.6s ease, transform 2.6s ease; }
+  #ending > .on { opacity: 1; transform: none; }
+  #ending p { margin: 0; font-size: 24px; line-height: 2.1; letter-spacing: 5px; }
+  #ending p.gap { margin-top: 1.6em; }
+  #ending h2 { margin: 2.2em 0 0 18px; font-size: 56px; font-weight: normal; letter-spacing: 18px; color: #f2ecdc; }
+  #ending .again { margin-top: 2.6em; font-size: 14px; letter-spacing: 6px; }
+  #ending .again.on { opacity: 0.6; }
+  @media (max-width: 700px) { #ending p { font-size: 18px; } #ending h2 { font-size: 42px; } }
   #title { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
     background: rgba(232,230,222,0.55); transition: opacity 2s; cursor: pointer; }
   #title h1 { font-size: 72px; font-weight: normal; letter-spacing: 28px; margin: 0 0 10px 28px; color: #2f322f; }
@@ -42,6 +55,13 @@
 </head>
 <body>
 <div id="vignette"></div>
+<div id="ending">
+  <p>他说，风一来，春天就来了。</p>
+  <p class="gap">风是看不见的。</p>
+  <p>可万物都记得它来过。</p>
+  <h2>风物</h2>
+  <div class="again">点击重新开始</div>
+</div>
 <div id="season"></div>
 <div id="line"></div>
 <div id="hint"></div>
@@ -479,23 +499,36 @@ function houseRoof(L, D, Hh) {
   ]);
 }
 const HOUSE_TYPES = [[8, 5.2, 3.6], [6.4, 4.8, 3.3], [10, 5.6, 3.9]].map(([L, D, Hh]) => ({
-  body: houseBody(L, D, Hh), roof: houseRoof(L, D, Hh), win: [[-L * 0.3, 2.6, D / 2 + 0.1], [L * 0.3, 2.6, D / 2 + 0.1]] }));
+  D, body: houseBody(L, D, Hh), roof: houseRoof(L, D, Hh), win: [[-L * 0.3, 2.6, D / 2 + 0.1], [L * 0.3, 2.6, D / 2 + 0.1]] }));
 const winGeo = new THREE.PlaneGeometry(1.15, 1.05);
 const houseSpots = [];
-for (let tries = 0; houseSpots.length < 15 && tries < 600; tries++) {
-  const x = VX + (rand() - 0.5) * 95, z = VZ + (rand() - 0.5) * 95;
-  if (Math.abs(x - riverX(z)) < 24 || houseSpots.some(p => Math.hypot(p.x - x, p.z - z) < 14)) continue;
-  const y = H(x, z); if (y < WATER + 2) continue;
-  const slope = Math.abs(H(x + 5, z) - y) + Math.abs(H(x, z + 5) - y); if (slope > 3) continue;
-  houseSpots.push({ x, y, z });
-  const T = HOUSE_TYPES[houseSpots.length % 3];
-  const g = new THREE.Group(); g.position.set(x, y - 0.4, z);
-  // face roughly toward the river, like a riverside village would
-  g.rotation.y = Math.atan2(riverX(z) - x, 0) + (rand() - 0.5) * 0.4 + (rand() < 0.3 ? Math.PI / 2 : 0);
+function addHouse(x, z, rotY, T) {
+  const y = H(x, z), g = new THREE.Group(); g.position.set(x, y - 0.4, z); g.rotation.y = rotY;
   const b = new THREE.Mesh(T.body, kitMat), r = new THREE.Mesh(T.roof, roofMat);
   b.castShadow = b.receiveShadow = r.castShadow = r.receiveShadow = true; g.add(b, r);
   T.win.forEach(p => { const w = new THREE.Mesh(winGeo, winMat); w.position.set(...p); g.add(w); });
   scene.add(g);
+  const spot = { x, y, z, g, D: T.D }; houseSpots.push(spot); return spot;
+}
+// The village sits with its back to the slope and faces the water, every house the same way.
+// Houses stand in rows that follow the river bank, each row a step further up the slope;
+// neighbouring rows are offset by half a house, gaps are left for lanes, and each house
+// sits a little forward or back so the rows never look ruled.
+const AWAY = Math.sign(OLD.x - riverX(OLD.z)) || 1;              // from the river toward the village
+const FACE_RIVER = Math.atan2(-AWAY, 0);                          // front of every house faces the river
+// her home: a small house just behind the old tree, facing the same way as everyone else's
+const HER_HOME = addHouse(OLD.x + AWAY * 10, OLD.z + 7, FACE_RIVER, HOUSE_TYPES[1]);
+for (let row = 0; row < 3; row++) {
+  const back = 30 + row * 14, stagger = row % 2 ? 6.5 : 0;
+  for (let z = VZ - 58 + stagger; z < VZ + 60; z += 12.5 + rand() * 2.5) {
+    if (rand() < 0.22) continue;                                  // a lane, a vegetable patch, a gap
+    const x = riverX(z) + AWAY * (back + (rand() - 0.5) * 3), zz = z + (rand() - 0.5) * 1.5;
+    if (houseSpots.some(p => Math.hypot(p.x - x, p.z - zz) < 11)) continue;
+    if (Math.hypot(x - OLD.x, zz - OLD.z) < 13) continue;         // keep the space around the old tree open
+    const y = H(x, zz); if (y < WATER + 2) continue;
+    const slope = Math.abs(H(x + 5, zz) - y) + Math.abs(H(x, zz + 5) - y); if (slope > 3.5) continue;
+    addHouse(x, zz, FACE_RIVER + (rand() - 0.5) * 0.08, HOUSE_TYPES[Math.floor(rand() * 3)]);
+  }
 }
 
 // stone arch bridge just downstream of the village
@@ -785,6 +818,14 @@ const lanternGeo = merge([
 ]);
 const lanternMat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, fog: false });
 const lanternGlow = new THREE.SpriteMaterial({ map: SOFT, color: 0xff9a40, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+// The halo is a large camera-facing sprite; resting on the snow, its lower half used to sink into the ground.
+// For the depth test only, pull it a few metres toward the camera: the snow behind and below the lantern
+// no longer cuts it, while a house or a hill that is really in front of the lantern still hides it.
+lanternGlow.onBeforeCompile = sh => {
+  sh.vertexShader = sh.vertexShader.replace('gl_Position = projectionMatrix * mvPosition;', `gl_Position = projectionMatrix * mvPosition;
+    vec4 pulled = mvPosition; pulled.z = min(pulled.z + 9.0, -1.0);
+    vec4 pc = projectionMatrix * pulled; gl_Position.z = pc.z / pc.w * gl_Position.w;`);
+};
 function makeLantern(x, y, z) {
   const g = new THREE.Group(); g.position.set(x, y, z);
   g.add(new THREE.Mesh(lanternGeo, lanternMat));
@@ -809,14 +850,14 @@ function setupWinter() {
     const a = k / 8 * Math.PI * 2 + 0.3, r = 30 + (k % 3) * 16;
     let x = VX + Math.cos(a) * r, z = VZ + Math.sin(a) * r;
     if (Math.abs(x - riverX(z)) < 20) x += 30;
-    if (k === 0) { x = FAM.lantern.x; z = FAM.lantern.z; } // theirs
     const y = Math.max(H(x, z), WATER) + 1.2;
     const g = makeLantern(x, y, z);
     const t = { pos: g.position, done: false, radius: 22,
       beacon: beacon(0xffb060),
-      onTouch() { riseLantern(g); if (k === 0) gpLook = true; }, // as theirs rises he looks up after the wind
+      onTouch() { riseLantern(g); },
       update() {} };
     t.beacon.position.set(x, y + 6, z);
+    t.beacon.visible = false; // the lanterns are bright enough on their own
     list.push(t);
   }
   return list;
@@ -964,9 +1005,19 @@ function setupAutumn() {
 }
 
 // ---------------------------------------------------------------- grandfather & granddaughter
+// the height of the ground as it is actually drawn (the terrain is faceted, so between grid points
+// it can sit a little below the smooth height function); people and the stool stand on this
+const groundRay = new THREE.Raycaster(), DOWN = new THREE.Vector3(0, -1, 0);
+terrain.updateMatrixWorld();
+function groundAt(x, z) {
+  groundRay.set(_gp.set(x, 400, z), DOWN);
+  const hit = groundRay.intersectObject(terrain, false)[0];
+  return Math.max(hit ? hit.point.y : H(x, z), WATER);
+}
+const _gp = new THREE.Vector3();
 const FAM = (() => {
   const F = new THREE.Vector3(Math.sign(riverX(OLD.z) - OLD.x) || -1, 0, 0);
-  const at = (f, l) => { const x = OLD.x + F.x * f, z = OLD.z + l; return new THREE.Vector3(x, H(x, z), z); };
+  const at = (f, l) => { const x = OLD.x + F.x * f, z = OLD.z + l; return new THREE.Vector3(x, groundAt(x, z), z); };
   return { F, at, yaw: Math.atan2(F.x, F.z), stool: at(4, 1), girl: at(5.8, 3.4), girlSit: at(5.2, 2.6), gpStand: at(4.6, -0.9),
     lantern: at(8.6, 1.8) };
 })();
@@ -1019,22 +1070,39 @@ function makePinwheel() {
   return { g, wheel, spin: 0, target: 0 };
 }
 function figure(geo, scale = 1) { const m = new THREE.Mesh(geo, kitMat); m.castShadow = true; m.scale.setScalar(scale); return m; }
-const famStool = figure(merge([part(BOX(1.1, 0.6, 0.9), '#6b5038', [0, 0.3, 0])]));
+// his stool: an old square wooden stool, legs splayed a little, stretchers low between them
+const famStool = figure((() => {
+  const parts = [
+    part(BOX(0.92, 0.07, 0.82), '#7d5c3e', [0, 0.585, 0]),                // seat
+    part(BOX(0.84, 0.006, 0.74), '#93704d', [0, 0.622, 0]),               // worn, paler top
+    part(BOX(0.74, 0.07, 0.03), '#6a4c32', [0, 0.515, 0.3]), part(BOX(0.74, 0.07, 0.03), '#6a4c32', [0, 0.515, -0.3]), // aprons
+    part(BOX(0.03, 0.07, 0.6), '#6a4c32', [0.35, 0.515, 0]), part(BOX(0.03, 0.07, 0.6), '#6a4c32', [-0.35, 0.515, 0]),
+    part(BOX(0.78, 0.04, 0.04), '#5f4430', [0, 0.16, 0.34]), part(BOX(0.78, 0.04, 0.04), '#5f4430', [0, 0.2, -0.34]),  // stretchers
+    part(BOX(0.04, 0.04, 0.7), '#5f4430', [0.38, 0.2, 0]), part(BOX(0.04, 0.04, 0.7), '#5f4430', [-0.38, 0.16, 0]),
+  ];
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) // legs, each leaning slightly outward
+    parts.push(part(CYL(0.038, 0.05, 0.56, 6), sx * sz > 0 ? '#6b4e33' : '#664a30', [sx * 0.37, 0.28, sz * 0.33], [sz * 0.06, 0, -sx * 0.06]));
+  return merge(parts);
+})());
 const famGrandpa = new THREE.Group(), gpSit = figure(geoGrandpaSit), gpStand = figure(geoGrandpaStand);
 famGrandpa.add(gpSit, gpStand);
 const famGirl = new THREE.Group(), girlStand = figure(geoGirl('#c0504a', false), 0.75), girlSit = figure(geoGirl('#c0504a', true), 0.75);
-const girlOld = figure(geoGirl('#a8443f', false, true), 0.75); girlOld.visible = false;
-famGirl.add(girlStand, girlSit, girlOld);
+famGirl.add(girlStand, girlSit);
 const pin = makePinwheel(); pin.g.position.set(0.5, 1.0, 0.3); pin.g.scale.setScalar(1.3); girlStand.add(pin.g); pin.g.scale.setScalar(1.3 / 0.75);
 [famStool, famGrandpa, famGirl].forEach(o => { o.rotation.y = FAM.yaw; scene.add(o); });
 famStool.position.copy(FAM.stool);
-const stoolSnow = figure(merge([part(BOX(1.15, 0.22, 0.95), '#eef2f8', [0, 0.68, 0], [0, 0, 0.02])])); stoolSnow.visible = false; famStool.add(stoolSnow);
+const stoolSnow = figure(merge([ // a soft cap of snow on the seat, a little on the stretchers
+  part(BOX(0.95, 0.07, 0.85), '#eef2f8', [0, 0.655, 0]), part(BOX(0.78, 0.05, 0.68), '#f6f8fb', [0, 0.71, 0]),
+  part(BOX(0.78, 0.03, 0.06), '#eef2f8', [0, 0.195, 0.34]), part(BOX(0.06, 0.03, 0.7), '#eef2f8', [0.38, 0.235, 0]),
+])); stoolSnow.visible = false; famStool.add(stoolSnow);
+// in winter a pinwheel stands on his stool, facing the valley
+const stoolPin = makePinwheel(); stoolPin.g.position.set(0, 0.7, 0); stoolPin.g.scale.setScalar(1.2); stoolPin.g.visible = false; famStool.add(stoolPin.g);
 let gpLook = false;
 let girlYaw = FAM.yaw, girlReact = 0, girlReactCD = 0, girlRun = null;
 function setFamily(mode) {
   const M = { spring: ['sit', 'stand', true], qingming: ['sit', 'stand', false], summer: ['sit', 'sit', false], autumn: ['stand', 'stand', false],
-    winter: ['stand', 'stand', false] }[mode];
-  const V3 = (x, z, dy = 0) => new THREE.Vector3(x, Math.max(H(x, z), WATER) + dy, z);
+    winter: [null, null, false] }[mode]; // in winter nobody is under the tree; she comes out later
+  const V3 = (x, z, dy = 0) => new THREE.Vector3(x, groundAt(x, z) + dy, z);
   let stool = FAM.stool, gp = M[0] === 'stand' ? FAM.gpStand : FAM.stool, girl = M[1] === 'sit' ? FAM.girlSit : FAM.girl, yaw = FAM.yaw;
   if (mode === 'summer') { // on the bank above the bridge, watching the boats go by
     const z = VZ - 30, x = riverX(z) + 19;
@@ -1050,8 +1118,8 @@ function setFamily(mode) {
   famGirl.visible = !!M[1]; girlStand.visible = M[1] === 'stand'; girlSit.visible = M[1] === 'sit';
   famGirl.position.copy(girl); famGirl.rotation.y = girlYaw = yaw;
   pin.g.visible = M[2];
-  stoolSnow.visible = mode === 'winter';
-  girlOld.visible = false; famGirl.scale.setScalar(1); gpLook = false;
+  stoolSnow.visible = stoolPin.g.visible = mode === 'winter';
+  famGirl.scale.setScalar(1); gpLook = false;
   girlRun = null;
 }
 setFamily('spring');
@@ -1115,15 +1183,17 @@ function finishChapter() {
         riseLantern(makeLantern(x, Math.max(H(x, z), WATER) + 1.2, z), 2.4 + rand() * 2);
       });
     });
-    after(17, startMontage);
+    after(13, herWalk); // first, a little while to fly among the lanterns
   }
 }
 
+$('ending').addEventListener('click', () => { if (state === 'end') location.reload(); });
 $('title').addEventListener('click', () => {
   if (state === 'end') { location.reload(); return; }
   if (state !== 'title') return;
   $('title').classList.add('hide');
   try { sound.init(); } catch (e) { console.warn(e); }
+  if (location.hash === '#winter') { startChapter(CHAPTERS.length - 1); return; } // test entry: jump straight to 冬至
   startPrologue();
 });
 
@@ -1157,63 +1227,120 @@ function onPinwheel() {
 }
 
 // ---------------------------------------------------------------- the last lantern
-let lastPhase = 0, herLantern = null;
-// the years go round under the old tree: slow at first, then faster
-function startMontage() {
-  state = 'montage'; setHint(''); setDots(0, 0); targets = []; edge.style.opacity = 0;
-  scene.remove(stage); stage = new THREE.Group(); scene.add(stage);
-  glowTarget = 0; $('season').style.opacity = 0;
-  cine = { pos: OPENING.pos.clone(), look: OPENING.look.clone(), k: 0.6 };
-  risen.forEach(g => after(3, () => { g.visible = false; }));
-  const seasons = ['spring', 'summer', 'autumn', 'winter'], durs = [2.8, 1.5, 0.8, 0.45];
-  let t = 3;
-  durs.forEach((d, r) => seasons.forEach((key, si) => { after(t, () => montageStep(key, r, si, d)); t += d; }));
-  after(t, nextWinter);
-}
-const SEASON_P = () => ({ spring: CHAPTERS[0].particles, summer: CHAPTERS[2].particles, autumn: CHAPTERS[3].particles, winter: CHAPTERS[4].particles });
-function montageStep(key, round, si, d) {
-  toPalette(key, Math.max(0.3, d * 0.85));
-  pMode = SEASON_P()[key];
-  sound.chime(round * 2 + si);
-  if (key === 'spring') trees.forEach(t => { t.g = 0.5; t.gT = 1; });
-  treeSpeed = 0.5 / Math.max(0.3, d);
-  setMontageFamily(key, round);
-}
-let treeSpeed = 0.5;
-function setMontageFamily(key, round) {
-  setFamily('spring'); pin.g.visible = false;
-  const gpHere = round === 0, sit = key === 'summer' && round < 2;
-  famGrandpa.visible = gpHere;
-  gpSit.visible = gpHere && (key === 'spring' || key === 'summer'); gpStand.visible = gpHere && !gpSit.visible;
-  famGrandpa.position.copy(gpSit.visible ? FAM.stool : FAM.gpStand);
-  stoolSnow.visible = key === 'winter';
-  girlStand.visible = round < 2 && !sit; girlSit.visible = sit; girlOld.visible = round >= 2;
-  famGirl.position.copy(sit ? FAM.girlSit : FAM.girl);
-  famGirl.scale.setScalar(1 + round * 0.1);
-}
-// then everything stops: another 冬至
-function nextWinter() {
-  state = 'still';
-  toPalette('winter', 2); pMode = { fall: 3, drift: 1, size: 0.9, color: C('#ffffff'), opacity: 0.8 };
-  sound.windScale = 0.35; treeSpeed = 0.5;
-  setMontageFamily('winter', 3);
-  herLantern = makeLantern(0, 0, 0); famGirl.add(herLantern);
-  herLantern.position.set(0, 1.4, 0.6); herLantern.scale.setScalar(0.5);
-  // cut to the empty stool under snow; her lantern's glow at the edge of the frame
-  const close = FAM.at(6.6, -0.8).add(_v.set(0, 1.1, 0)), at = FAM.stool.clone().add(_v.set(0, 0.5, 0));
-  camPos.copy(close); camLook.copy(at);
-  cine = { pos: close, look: at, k: 3 };
-  after(2, () => setSeasonLabel('冬至', '又一年'));
-  after(6, () => { cine = { pos: OPENING.pos.clone(), look: OPENING.look.clone(), k: 0.35 }; });
-  after(14, () => {
-    const dir = OPENING.look.clone().sub(OPENING.pos).setY(0).normalize();
-    player.pos.copy(OPENING.pos).addScaledVector(dir, -14).add(_v.set(0, 2, 0));
-    player.yaw = Math.atan2(-dir.x, -dir.z) + 0.38; player.pitch = -0.02; player.yawRate = 0; player.speed = 0; // slightly off: you have to turn toward her
-    trailPts.forEach(p => p.copy(player.pos));
-    camPos.copy(player.pos).addScaledVector(dir, -9).add(_v.set(0, 2.5, 0));
-    cine = null; glowTarget = 1; $('season').style.opacity = 0;
-    lastLantern();
+let lastPhase = 0, herLantern = null, treeSpeed = 0.5;
+// while the village's lanterns go up, she comes out of the house nearest the old tree,
+// carrying one more lantern, and lights it herself beside his stool
+// a girl who can actually walk: legs on hip pivots, both hands holding the lantern in front of her
+function makeWalker() {
+  const g = new THREE.Group();
+  g.add(figure(merge([
+    part(CYL(0.36, 0.56, 1.15, 7), '#c0504a', [0, 1.35, 0]),
+    part(new THREE.IcosahedronGeometry(0.4, 1), SKIN, [0, 2.25, 0]),
+    part(new THREE.IcosahedronGeometry(0.42, 1), HAIR, [0, 2.36, -0.07], [0, 0, 0], [1, 0.8, 1]),
+    part(ICO(0.17), HAIR, [-0.33, 2.55, -0.05]), part(ICO(0.17), HAIR, [0.33, 2.55, -0.05]),
+    part(CYL(0.09, 0.1, 0.72, 5), '#c0504a', [0.28, 1.6, 0.34], [2.04, 0, 0.18]),
+    part(CYL(0.09, 0.1, 0.72, 5), '#c0504a', [-0.28, 1.6, 0.34], [2.04, 0, -0.18]),
+  ])));
+  const legs = [-0.18, 0.18].map(x => {
+    const hip = new THREE.Group(); hip.position.set(x, 0.8, 0);
+    hip.add(figure(merge([part(CYL(0.13, 0.15, 0.8, 5), '#3b3a44', [0, -0.4, 0])]))); g.add(hip); return hip;
   });
+  g.scale.setScalar(0.75); g.userData.legs = legs;
+  return g;
+}
+const turnTo = (cur, want, k) => cur + Math.atan2(Math.sin(want - cur), Math.cos(want - cur)) * k;
+// while the village's lanterns go up, the door of the house nearest the old tree opens.
+// she steps out, pulls the door to behind her, walks to his stool, stops to look at it,
+// and lights the lantern she has carried out
+function herWalk() {
+  state = 'still'; setHint(''); edge.style.opacity = 0;
+  const home = HER_HOME;
+  const hz = home.D / 2;
+  // the door: a hinged panel over the painted one, warm light behind it
+  const glowIn = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 2.2), new THREE.MeshBasicMaterial({ color: 0xffb45e }));
+  glowIn.position.set(0, 1.75, hz + 0.12); home.g.add(glowIn);
+  const hinge = new THREE.Group(); hinge.position.set(-0.65, 0.6, hz + 0.17); home.g.add(hinge);
+  const leaf = figure(merge([part(BOX(1.3, 2.3, 0.08), '#4a3a2e', [0.65, 1.15, 0]), part(BOX(0.06, 0.06, 0.08), '#2c221b', [1.12, 1.15, 0.06])]));
+  hinge.add(leaf);
+  const spill = new THREE.Sprite(new THREE.SpriteMaterial({ map: SOFT, color: 0xffb45e, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+  spill.position.set(0, 1.4, hz + 1.2); spill.scale.setScalar(5); home.g.add(spill);
+  const local = (x, z) => { const p = home.g.localToWorld(new THREE.Vector3(x, 0, z)); p.y = groundAt(p.x, p.z); return p; };
+  const inside = local(0, hz - 0.4), outside = local(0, hz + 1.8), doorAt = local(0, hz);
+  const outYaw = Math.atan2(outside.x - inside.x, outside.z - inside.z);
+  // her, and her lantern, not yet lit
+  const her = makeWalker(); her.position.copy(inside); her.rotation.y = outYaw; her.visible = false; scene.add(her);
+  herLantern = new THREE.Group();
+  const paper = new THREE.Mesh(lanternGeo, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }));
+  const flame = new THREE.Sprite(lanternGlow); flame.scale.setScalar(0.01); flame.visible = false;
+  const match = new THREE.Sprite(new THREE.SpriteMaterial({ map: SOFT, color: 0xfff0b0, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+  match.position.set(0, -0.9, 0.3); match.scale.setScalar(1.6);
+  herLantern.add(paper, flame, match); her.add(herLantern);
+  herLantern.position.set(0, 1.42, 0.82); herLantern.scale.setScalar(0.67);
+  famGirl.visible = false;
+  // one shot from the valley side: the door and the old tree are both in it; the camera only turns to follow her
+  const shot = OPENING.pos.clone().addScaledVector(FAM.F, 3).add(_v.set(0, 1.6, 0));
+  cine = { pos: shot, look: doorAt.clone().lerp(FAM.stool, 0.35).add(_v.set(0, 1.6, 0)), k: 0.9 };
+  const stopAt = FAM.girl.clone(), walkFrom = outside.clone();
+  let t = 0, phase = 'wait', walkT = 0, walkLen = 1, step = 0, pause = 0;
+  const anim = dt => {
+    if (phase === 'done') return;
+    t += dt;
+    const legs = her.userData.legs, swing = a => { legs[0].rotation.x = a; legs[1].rotation.x = -a; };
+    if (phase === 'wait' && t > 0.4) phase = 'open';
+    if (phase === 'open') { // the door swings out, light spills onto the snow
+      hinge.rotation.y = lerp(hinge.rotation.y, -1.75, Math.min(1, dt * 3.5));
+      spill.material.opacity = Math.min(0.6, spill.material.opacity + dt * 1.2);
+      if (t > 1.0) { phase = 'out'; her.visible = true; walkT = 0; }
+    }
+    if (phase === 'out') { // a few steps out of the doorway
+      walkT = Math.min(1, walkT + dt / 1.0); step += dt * 8;
+      her.position.lerpVectors(inside, outside, smooth(0, 1, walkT));
+      her.position.y = groundAt(her.position.x, her.position.z);
+      swing(Math.sin(step) * 0.45 * (1 - walkT * 0.5));
+      if (walkT >= 1) { phase = 'close'; pause = 0; swing(0); }
+    }
+    if (phase === 'close') { // she turns back and pulls the door to
+      pause += dt;
+      her.rotation.y = turnTo(her.rotation.y, outYaw + Math.PI, Math.min(1, dt * 6));
+      if (pause > 0.3) { hinge.rotation.y = lerp(hinge.rotation.y, 0, Math.min(1, dt * 5)); spill.material.opacity = Math.max(0, spill.material.opacity - dt * 1.5); }
+      if (pause > 1.0) { phase = 'walk'; walkT = 0; walkLen = Math.max(1, walkFrom.distanceTo(stopAt)); }
+    }
+    if (phase === 'walk') { // across the snow to his stool, slowing as she gets close
+      const want = Math.atan2(stopAt.x - her.position.x, stopAt.z - her.position.z);
+      her.rotation.y = turnTo(her.rotation.y, want, Math.min(1, dt * 3));
+      const u = walkT, speed = 1.9 * (0.6 + 0.4 * Math.min(1, u * 4)) * (0.35 + 0.65 * Math.min(1, (1 - u) * 3));
+      walkT = Math.min(1, walkT + speed * dt / walkLen); step += dt * 5.5 * speed;
+      her.position.lerpVectors(walkFrom, stopAt, walkT);
+      her.position.y = groundAt(her.position.x, her.position.z) + Math.abs(Math.sin(step)) * 0.03;
+      swing(Math.sin(step) * 0.42);
+      cine.look.lerp(_v.copy(her.position).add(tmp.set(0, 1.4, 0)), Math.min(1, dt * 2));
+      if (walkT >= 1) { phase = 'look'; pause = 0; swing(0); her.position.y = groundAt(her.position.x, her.position.z); }
+    }
+    if (phase === 'look') { // she stops and looks at the stool
+      pause += dt;
+      const atStool = Math.atan2(FAM.stool.x - her.position.x, FAM.stool.z - her.position.z);
+      her.rotation.y = turnTo(her.rotation.y, pause < 1.5 ? atStool : FAM.yaw, Math.min(1, dt * 3));
+      cine.look.lerp(OPENING.look, Math.min(1, dt * 1.5));
+      if (pause > 2.1) { phase = 'light'; pause = 0; }
+    }
+    if (phase === 'light') { // a match, then the flame catches and the paper glows
+      pause += dt;
+      match.material.opacity = pause < 0.8 ? 0.9 * (0.7 + 0.3 * Math.sin(now * 30)) : Math.max(0, match.material.opacity - dt * 2);
+      if (pause > 0.6 && !flame.visible) { paper.material = lanternMat; flame.visible = true; }
+      if (flame.visible) flame.scale.setScalar(9 * Math.min(1, (pause - 0.6) * 0.8) * (0.85 + 0.15 * Math.sin(now * 13)));
+      if (pause > 2.2) { phase = 'done'; windReturns(); }
+    }
+  };
+  extras.push(anim);
+}
+function windReturns() { // the wind comes back, a little off to one side: you turn toward her yourself
+  const dir = OPENING.look.clone().sub(OPENING.pos).setY(0).normalize();
+  player.pos.copy(OPENING.pos).addScaledVector(dir, -14).add(_v.set(0, 2, 0));
+  player.yaw = Math.atan2(-dir.x, -dir.z) + 0.38; player.pitch = -0.02; player.yawRate = 0; player.speed = 0;
+  trailPts.forEach(p => p.copy(player.pos));
+  camPos.copy(player.pos).addScaledVector(dir, -9).add(_v.set(0, 2.5, 0));
+  cine = null;
+  lastLantern();
 }
 function lastLantern() {
   lastPhase = 1; state = 'play';
@@ -1221,36 +1348,41 @@ function lastLantern() {
     onTouch: releaseLast, update() {} };
   t.beacon.visible = false;
   targets = [t];
+  after(1.2, () => { if (state === 'play' && lastPhase) setHint('飞到她身边，把灯送上天'); });
 }
 function releaseLast() {
   state = 'finale'; setHint(''); setDots(0, 0); edge.style.opacity = 0;
   $('line').classList.remove('show'); lineTimer = 0;
-  // she lets go — and this year it is the only one
+  // she lets go; hers is the last lantern to rise
   const g = herLantern; g.getWorldPosition(_v); scene.attach(g); g.position.copy(_v);
-  const x0 = g.position.x, z0 = g.position.z, side = new THREE.Vector3(2.2, 0.6, 1.4);
-  let v = 0.3;
+  g.scale.setScalar(0.6);
+  const x0 = g.position.x, z0 = g.position.z;
+  let v = 0.3, spin = 0, orbit = Math.atan2(0, FAM.F.x) - 0.35;
+  cine = { follow: g, off: new THREE.Vector3(), maxY: 110, k: 0.9 };
   extras.push(dt => {
     v = Math.min(6.5, v + dt * 0.6);
     g.position.y += v * dt;
     g.position.x = x0 + Math.sin(now * 0.3) * 2 + (g.position.y - 10) * 0.04;
     g.position.z = z0 + Math.cos(now * 0.25) * 2;
-    player.pos.copy(g.position).add(side); // the wind goes up with it
+    // the wind circles it, carrying it up: its trail draws a spiral round the lantern
+    spin += dt * 2.6;
+    const r = 2.4 + Math.min(1.2, v * 0.15);
+    player.pos.set(g.position.x + Math.cos(spin) * r, g.position.y - 0.6 + Math.sin(spin * 0.5) * 0.4, g.position.z + Math.sin(spin) * r);
+    // and the camera slowly walks round it as well
+    orbit += dt * 0.2;
+    if (cine && cine.follow === g) cine.off.set(Math.cos(orbit) * 30, -4, Math.sin(orbit) * 30);
   });
-  cine = { follow: g, off: new THREE.Vector3(FAM.F.x * 30, -4, -9), maxY: 110, k: 0.7 };
   sound.windScale = 0.3;
   after(10, () => extras.push(dt => { cloudMat.opacity = Math.max(0, cloudMat.opacity - dt * 0.06); })); // the clouds part
   after(14, () => { pMode = { ...pMode, opacity: 0 }; });   // and the snow stops
-  after(15, () => showLine('他说，风一来，春天就来了。', 6.5));
   after(20, () => { glowTarget = 0; });                       // the wind goes with the light
-  after(23.5, () => showLine('风是看不见的。\n可万物都记得它来过。', 8));
-  after(34, () => {
-    $('season').style.opacity = 0;
-    const t = $('title'); t.querySelector('h1').textContent = '风物';
-    t.querySelector('.sub').innerHTML = '&nbsp;'; t.querySelector('.how').innerHTML = '&nbsp;';
-    t.querySelector('.go').textContent = '点击重新开始';
-    t.style.background = 'rgba(8,12,26,0.35)'; t.style.color = '#e6e1d2'; t.querySelector('h1').style.color = '#f0ebdc';
-    t.classList.remove('hide'); state = 'end';
-  });
+  // the closing words appear one under another and stay
+  const ending = $('ending').children, reveal = i => ending[i].classList.add('on');
+  after(14, () => { $('season').style.opacity = 0; $('ending').classList.add('shade'); reveal(0); });
+  after(20, () => reveal(1));
+  after(23.5, () => reveal(2));
+  after(30, () => reveal(3));
+  after(33, () => { reveal(4); state = 'end'; $('ending').style.pointerEvents = 'auto'; });
 }
 
 // ---------------------------------------------------------------- loop
@@ -1335,9 +1467,9 @@ function step(dt) {
     girlReactCD -= dt;
     if (state !== 'prologue' && glowFade > 0.5 && girlReactCD <= 0 && player.pos.distanceTo(famGirl.position) < 14) { girlReact = 2.6; girlReactCD = 7; }
     if (girlRun) {
-      girlRun.t = Math.min(1, girlRun.t + dt * 0.22);
+      girlRun.t = Math.min(1, girlRun.t + dt * (girlRun.rate || 0.22));
       famGirl.position.lerpVectors(girlRun.from, girlRun.to, girlRun.t);
-      famGirl.position.y = H(famGirl.position.x, famGirl.position.z) + Math.abs(Math.sin(now * 9)) * 0.25 * (girlRun.t < 1 ? 1 : 0);
+      famGirl.position.y = H(famGirl.position.x, famGirl.position.z) + (girlRun.walk ? Math.abs(Math.sin(now * 5)) * 0.06 : Math.abs(Math.sin(now * 9)) * 0.25) * (girlRun.t < 1 ? 1 : 0);
       famGirl.rotation.y = Math.atan2(girlRun.to.x - girlRun.from.x, girlRun.to.z - girlRun.from.z);
     } else if (girlReact > 0) {
       girlReact -= dt;
@@ -1347,7 +1479,9 @@ function step(dt) {
   }
   if (state === 'meet' && !pinDone) { pin.wheel.getWorldPosition(_v); if (player.pos.distanceTo(_v) < 8) onPinwheel(); }
   if (pinDone) pin.target = player.pos.distanceTo(famGirl.position) < 22 ? 1 : 0.12;
-  for (const pw of [pin]) { pw.spin = lerp(pw.spin, pw.target, Math.min(1, dt * 0.8)); pw.wheel.rotation.z -= pw.spin * dt * 9; }
+  // the pinwheel on his stool turns whenever the wind passes, and keeps turning once she has let go
+  if (stoolPin.g.visible) stoolPin.target = state === 'finale' || state === 'end' || player.pos.distanceTo(FAM.stool) < 15 ? 1 : 0;
+  for (const pw of [pin, stoolPin]) { pw.spin = lerp(pw.spin, pw.target, Math.min(1, dt * 0.8)); pw.wheel.rotation.z -= pw.spin * dt * 9; }
   waterTime.value = now;
   trailPts.pop(); trailPts.unshift(player.pos.clone().add(tmp.set(Math.sin(now * 7) * 0.4, Math.cos(now * 5) * 0.4, 0)));
   const tp = trailGeo.attributes.position;
@@ -1448,7 +1582,7 @@ function loop() {
 loop();
 
 // debug hook for testing
-window.__wind = { startMontage, peek: (from, at) => { cine = { pos: new THREE.Vector3(...from), look: new THREE.Vector3(...at), k: 40 }; }, unpeek: () => { cine = null; }, player, scene, get stage() { return stage; }, startChapter, lastLantern, famGirl, counts: () => ({ trees: trees.length, shrubs: shrubs.length, tufts: tufts.length }), get targets() { return targets; }, get state() { return state; }, get chapter() { return chapter; }, step };
+window.__wind = { herWalk, peek: (from, at) => { cine = { pos: new THREE.Vector3(...from), look: new THREE.Vector3(...at), k: 40 }; }, unpeek: () => { cine = null; }, player, scene, get stage() { return stage; }, startChapter, lastLantern, famGirl, counts: () => ({ trees: trees.length, shrubs: shrubs.length, tufts: tufts.length }), get targets() { return targets; }, get state() { return state; }, get chapter() { return chapter; }, step };
 </script>
 </body>
 </html>
