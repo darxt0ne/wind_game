@@ -13,9 +13,11 @@
   #season { position: fixed; top: 36px; right: 40px; writing-mode: vertical-rl; font-size: 34px; letter-spacing: 10px;
     opacity: 0; transition: opacity 2s, color 3s; text-shadow: 0 0 12px rgba(255,255,255,0.4); }
   #season small { font-size: 14px; letter-spacing: 4px; margin-top: 14px; opacity: 0.7; }
-  #line { position: fixed; left: 0; right: 0; top: 30%; text-align: center; font-size: 26px; line-height: 2.1; letter-spacing: 4px;
+  /* the words sit on a soft veil, pale by day and dark by night, so a tree trunk or a roof behind them never swallows them */
+  #line { position: fixed; left: 0; right: 0; top: 28%; padding: 0.9em 0; text-align: center; font-size: 26px; line-height: 2.1; letter-spacing: 4px;
     opacity: 0; transition: opacity 1.6s, color 3s; pointer-events: none; white-space: pre-line;
-    text-shadow: 0 0 18px rgba(255,255,255,0.55); }
+    background: radial-gradient(ellipse 34% 62% at 50% 50%, var(--veil, rgba(246,244,238,0.62)), rgba(0,0,0,0) 72%);
+    text-shadow: 0 0 6px var(--glow, rgba(255,255,255,0.9)), 0 0 18px var(--glow, rgba(255,255,255,0.7)); }
   #line.show { opacity: 1; }
   #hint { position: fixed; left: 0; right: 0; bottom: 64px; text-align: center; font-size: 16px; letter-spacing: 3px;
     opacity: 0; transition: opacity 1.6s, color 3s; pointer-events: none; }
@@ -615,7 +617,7 @@ const trailMat = new THREE.ShaderMaterial({
   transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
   uniforms: { col: { value: new THREE.Color(0xffffff) }, scale: { value: innerHeight }, fade: { value: 1 } },
   vertexShader: `attribute float aAge; varying float vA; uniform float scale;
-    void main(){ vA = aAge; vec4 mv = modelViewMatrix*vec4(position,1.); gl_PointSize = (1.6 - aAge*1.3) * scale * 0.9 / -mv.z; gl_Position = projectionMatrix*mv; }`,
+    void main(){ vA = aAge; vec4 mv = modelViewMatrix*vec4(position,1.); gl_PointSize = min((1.6 - aAge*1.3) * scale * 0.9 / -mv.z, scale * 0.06); gl_Position = projectionMatrix*mv; }`,
   fragmentShader: `uniform vec3 col; uniform float fade; varying float vA;
     void main(){ float d = length(gl_PointCoord - .5); float a = smoothstep(.5, 0., d) * (1. - vA) * .5 * fade; gl_FragColor = vec4(col, a); }`,
 });
@@ -713,6 +715,10 @@ function setSeasonLabel(name, sub) { const el = $('season'); el.innerHTML = `${n
 function applyInk() {
   const ink = '#' + pal.ink.getHexString();
   ['season', 'line', 'hint', 'dots'].forEach(id => $(id).style.color = ink);
+  // dark words get a pale veil and glow; light (night-time) words get a dark one
+  const light = pal.ink.r * 0.3 + pal.ink.g * 0.59 + pal.ink.b * 0.11 > 0.5, s = document.documentElement.style;
+  s.setProperty('--veil', light ? 'rgba(10,14,28,0.5)' : 'rgba(246,244,238,0.62)');
+  s.setProperty('--glow', light ? 'rgba(8,12,26,0.85)' : 'rgba(255,255,255,0.9)');
 }
 
 // ---------------------------------------------------------------- beacons
@@ -1334,26 +1340,53 @@ function startPrologue() {
   after(11, () => { if (state === 'prologue') showLine('“等风来。\n风一来，春天就来了。”', 5.5); });
   after(17.5, () => {
     if (state !== 'prologue') return;
-    // the wind arrives just in front of the camera and drifts into the picture; the camera holds this
-    // framing while you steer it to them, and only follows once you fly off somewhere else
+    // The wind arrives on its own. It appears a few metres in front of the camera, swings out in an arc and
+    // comes in to her pinwheel; the camera turns with it and moves in close as it gets there. It circles the
+    // turning pinwheel once, then heads off down the valley, and only then is it yours.
     const dir = P.drift.look.clone().sub(P.drift.pos).setY(0).normalize(), side = new THREE.Vector3(dir.z, 0, -dir.x);
-    player.pos.copy(P.drift.pos).addScaledVector(dir, 3).addScaledVector(side, -3.5).add(_v.set(0, 0.4, 0)); // a few metres out, off to one side
-    // heading about 43 degrees away from her, so left alone it passes some ten metres wide: you turn toward her yourself
-    const toHer = famGirl.position.clone().sub(player.pos);
-    player.yaw = Math.atan2(-toHer.x, -toHer.z) + 0.75; player.pitch = -0.02; player.yawRate = 0; player.speed = 0;
-    trailPts.forEach(p => p.copy(player.pos));
-    glowTarget = 1; state = 'meet'; // cine stays on: the shot holds while the wind finds its way to them
-    after(25, () => { if (state === 'meet') setHint('飞向那只风车'); });
+    const S = P.drift.pos.clone().addScaledVector(dir, 7).addScaledVector(side, -3.5).add(_v.set(0, 0.6, 0));
+    const E = pin.wheel.getWorldPosition(new THREE.Vector3());
+    const C = S.clone().lerp(E, 0.5);                                                     // the arc swings up, and out away from the camera
+    C.addScaledVector(C.clone().sub(P.drift.pos).setY(0).normalize(), 3.5).add(_v.set(0, 3.5, 0));
+    const close = E.clone().addScaledVector(P.drift.pos.clone().sub(E).setY(0).normalize(), 6.5);
+    close.y = groundAt(close.x, close.z) + 1.8;                                           // where the camera comes in to
+    const away = new THREE.Vector3(FAM.F.x, 0.08, FAM.F.z).normalize();                   // down to the valley afterwards
+    player.pos.copy(S); player.speed = 0; trailPts.forEach(p => p.copy(player.pos)); glowTarget = 1;
+    cine = { pos: P.drift.pos.clone(), look: S.clone(), k: 1.4 };
+    let t = 0, phase = 'fly', spin = 0, rest = 0;
+    extras.push(dt => {
+      if (phase === 'done' || !cine) return;
+      if (phase === 'fly') {
+        t = Math.min(1, t + dt / 4.2);
+        const u = smooth(0, 1, t), a = 1 - u;
+        player.pos.set(a * a * S.x + 2 * a * u * C.x + u * u * E.x, a * a * S.y + 2 * a * u * C.y + u * u * E.y, a * a * S.z + 2 * a * u * C.z + u * u * E.z);
+        cine.look.copy(player.pos); cine.pos.lerpVectors(P.drift.pos, close, smooth(0.2, 1, t));
+        if (t >= 1) { phase = 'circle'; spin = Math.atan2(player.pos.z - E.z, player.pos.x - E.x); onPinwheel(); }
+      } else if (phase === 'circle') { // once round the pinwheel as it starts to turn
+        rest += dt; spin += dt * 3;
+        player.pos.set(E.x + Math.cos(spin) * 2.2, E.y + 0.3 + Math.sin(rest * 4) * 0.3, E.z + Math.sin(spin) * 2.2);
+        cine.look.lerp(E, Math.min(1, dt * 2));
+        if (rest > 2.2) { phase = 'off'; rest = 0; }
+      } else if (phase === 'off') { // and off down toward the valley
+        rest += dt; player.pos.addScaledVector(away, dt * 9 * Math.min(1, rest));
+        cine.look.lerp(player.pos, Math.min(1, dt * 1.5));
+        if (rest > 2.3) phase = 'done';
+      }
+    });
   });
 }
 function onPinwheel() {
-  pinDone = true; setHint(''); sound.chime(0);
+  pinDone = true; sound.chime(0);
   girlReact = 3; girlReactCD = 8;
   after(3.2, () => { // she runs off toward the valley with it
     const to = FAM.at(7, 26);
     girlRun = { from: famGirl.position.clone(), to, t: 0 };
   });
-  after(4.5, () => { if (state === 'meet') { cine = null; startChapter(0); } });
+  after(4.5, () => { // now the wind is yours, already heading down the valley toward the mist
+    if (state !== 'prologue') return;
+    player.yaw = Math.atan2(-FAM.F.x, -FAM.F.z); player.pitch = 0; player.yawRate = 0; player.speed = 10;
+    cine = null; startChapter(0);
+  });
 }
 
 // ---------------------------------------------------------------- the last lantern
@@ -1567,7 +1600,7 @@ function step(dt) {
     let diff = Math.atan2(Math.sin(want - player.yaw), Math.cos(want - player.yaw));
     player.yaw += diff * Math.min(1, dt * smooth(520, 640, r) * 1.6);
   }
-  const cruise = state === 'meet' || lastPhase ? 8 : (input.boost && active ? 62 : 28);
+  const cruise = lastPhase ? 8 : (input.boost && active ? 62 : 28);
   player.speed = lerp(player.speed, frozen ? 0 : cruise, Math.min(1, dt * 1.5));
   fwd.set(-Math.sin(player.yaw) * Math.cos(player.pitch), Math.sin(player.pitch), -Math.cos(player.yaw) * Math.cos(player.pitch));
   player.pos.addScaledVector(fwd, player.speed * dt);
@@ -1604,8 +1637,6 @@ function step(dt) {
       famGirl.rotation.y = lerp(famGirl.rotation.y, away + Math.sin(girlReact * 2.4) * 0.8, Math.min(1, dt * 3));
     } else famGirl.rotation.y = lerp(famGirl.rotation.y, girlYaw, Math.min(1, dt * 1.5));
   }
-  if (state === 'meet' && !pinDone) { pin.wheel.getWorldPosition(_v); if (player.pos.distanceTo(_v) < 8) onPinwheel(); }
-  if (state === 'meet' && !pinDone && cine && !cine.follow && player.pos.distanceTo(camPos) > 26) cine = null; // wandered off: follow the wind
   if (pinDone) pin.target = player.pos.distanceTo(famGirl.position) < 22 ? 1 : 0.12;
   // the pinwheel on his stool turns whenever the wind passes, and keeps turning once she has let go
   if (stoolPin.g.visible) stoolPin.target = state === 'finale' || state === 'end' || player.pos.distanceTo(FAM.stool) < 15 ? 1 : 0;
@@ -1633,8 +1664,7 @@ function step(dt) {
     camera.position.copy(camPos); camera.lookAt(camLook);
   } else {
     const back = tmp.copy(fwd).setY(fwd.y * 0.5).normalize();
-    const near = state === 'meet' ? 0.55 : 1;
-    const desired = new THREE.Vector3().copy(player.pos).addScaledVector(back, -17 * near).add(new THREE.Vector3(0, 5.5 * near, 0));
+    const desired = new THREE.Vector3().copy(player.pos).addScaledVector(back, -17).add(new THREE.Vector3(0, 5.5, 0));
     camPos.lerp(desired, 1 - Math.exp(-dt * 3.2));
     const cg = Math.max(H(camPos.x, camPos.z), WATER) + 2.5;
     if (camPos.y < cg) camPos.y = cg;
