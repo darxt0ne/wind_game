@@ -1,0 +1,9 @@
+# logo and icon experiments, kept locally only
+logo*.html
+logo*.png
+logo-fonts/
+logo-glyphs.js
+lettering.*
+glyphs.js
+icons.html
+icons-preview.png
