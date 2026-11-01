@@ -1122,21 +1122,16 @@ function headParts(sp) { // head, face and hair
       P.push(part(CYL(hr * 0.95, hr * 0.95, hr * 0.13, 12), '#3b2e24', at(0, 0.53, -0.05)));
       P.push(part(CYL(hr * 1.28, hr * 1.28, hr * 0.06, 14), '#5a4636', at(0, 0.47, -0.02), [-0.08, 0, 0]));
     }
-  } else { // dark hair: a soft fringe, a lock down each side, two plaits over her shoulders tied with red bows
-    P.push(ball(at(0, 0.22, -0.18), hr * 1.06, HAIR, [1, 0.86, 1]));
-    for (const sx of [-1, 0, 1]) P.push(part(BOX(hr * 0.5, hr * 0.32, hr * 0.3), HAIR, at(sx * 0.4, 0.55, 0.72), [0.2, 0, -sx * 0.1]));
+  } else { // short dark hair hanging straight down to her jaw, a soft fringe, a little red clip on one side
+    P.push(ball(at(0, 0.22, -0.18), hr * 1.06, HAIR, [1, 0.86, 1]));                    // crown
+    P.push(ball(at(0, -0.08, -0.24), hr * 1.08, HAIR, [1.06, 0.72, 0.96]));             // the back, falling to the nape
+    for (const sx of [-1, 0, 1]) P.push(part(BOX(hr * 0.5, hr * 0.32, hr * 0.3), HAIR, at(sx * 0.4, 0.55, 0.72), [0.2, 0, -sx * 0.1])); // fringe
     for (const sx of [-1, 1]) {
-      P.push(part(BOX(hr * 0.24, hr * 0.62, hr * 0.42), HAIR, at(sx * 0.82, 0.05, 0.12)));
-      // the plait: a chain of small beads from behind the ear, over the shoulder, down to the chest
-      const pts = [[0.74, -0.2, -0.12], [0.84, -0.7, 0.08], [0.78, -1.05, 0.62], [0.64, -1.85, 1.08]];
-      for (let s = 0; s < pts.length - 1; s++) for (let k = 0; k < 5; k++) {
-        const u = k / 5, a = pts[s], b = pts[s + 1], wob = (k % 2 ? 0.04 : -0.04);
-        P.push(ball(at(sx * (a[0] + (b[0] - a[0]) * u) + wob, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u), hr * 0.14, HAIR));
-      }
-      const end = at(sx * 0.64, -1.95, 1.1);
-      P.push(ball(end, hr * 0.07, '#d8343a'));
-      P.push(ball([end[0] - hr * 0.13, end[1], end[2]], hr * 0.11, '#d8343a', [1.2, 0.7, 0.4]), ball([end[0] + hr * 0.13, end[1], end[2]], hr * 0.11, '#d8343a', [1.2, 0.7, 0.4]));
+      P.push(part(BOX(hr * 0.28, hr * 0.95, hr * 0.5), HAIR, at(sx * 0.82, -0.25, 0.22), [0, 0, sx * 0.08]));  // the sides, down past the ears
+      P.push(part(BOX(hr * 0.3, hr * 0.12, hr * 0.5), HAIR, at(sx * 0.9, -0.72, 0.22), [0, 0, -sx * 0.35])); // ends turning out a little at the jaw
     }
+    P.push(ball(at(-0.62, 0.52, 0.58), hr * 0.07, '#d8343a'),                            // the clip: a tiny red bow above one temple
+      ball(at(-0.74, 0.55, 0.52), hr * 0.1, '#d8343a', [1.2, 0.7, 0.4]), ball(at(-0.5, 0.55, 0.62), hr * 0.1, '#d8343a', [1.2, 0.7, 0.4]));
   }
   return P;
 }
@@ -1158,7 +1153,7 @@ function rigPerson(sp, movingArm, scale = 1) {
   return g;
 }
 const OLD_MAN = { coat: '#5d6470', trim: '#3a3f48', trousers: '#3b3a44', shoe: '#2a2420', foot: [0.22, 0.14, 0.42], thigh: 0.15,
-  neck: 0.1, headR: 0.3, brow: WHITE, hair: 'white', face: 'old', hat: true, arm: 0.1, hand: 0.1 };
+  neck: 0.1, headR: 0.3, brow: WHITE, hair: 'white', face: 'old', arm: 0.1, hand: 0.1 };
 const geoGrandpaStand = body({ ...OLD_MAN, torso: { y0: 1.02, y1: 2.2, r0: 0.5, r1: 0.37 }, headY: 2.6,
   legs: [[[0.17, 1.25, 0], [0.18, 0.68, 0.04], [0.18, 0.16, 0]], [[-0.17, 1.25, 0], [-0.18, 0.68, 0.02], [-0.18, 0.16, 0]]],
   arms: [[[0.44, 2.08, 0], [0.56, 1.68, 0.16], [0.6, 1.4, 0.38]], [[-0.44, 2.08, 0], [-0.52, 1.62, 0.04], [-0.5, 1.2, 0.1]]],
