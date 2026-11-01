@@ -1077,7 +1077,11 @@ function body(sp) {
   const rAt = f => t.r1 + (t.r0 - t.r1) * f; // jacket radius, f = 0 at the shoulders, 1 at the hem
   P.push(part(BOX(0.045, (t.y1 - t.y0) * 0.9, 0.03), sp.trim, [0.07, (t.y0 + t.y1) / 2, rAt(0.5) + (t.z || 0)], [t.lean || 0, 0, 0])); // placket
   for (let i = 0; i < 3; i++) { const f = 0.18 + i * 0.22; P.push(ball([0.12, t.y1 - (t.y1 - t.y0) * f, rAt(f) + 0.02 + (t.z || 0)], 0.035, sp.trim)); }
-  P.push(part(CYL(sp.neck * 1.7, sp.neck * 2.2, 0.12, 10), sp.coat, [0, t.y1 + 0.03, hz * 0.4])); // standing collar
+  P.push(part(CYL(sp.neck * 1.7, sp.neck * 2.2, 0.12, 10), sp.collar || sp.coat, [0, t.y1 + 0.03, hz * 0.4])); // standing collar
+  if (sp.flowers) for (const [a, f] of [[-0.75, 0.3], [0.45, 0.22], [-0.25, 0.62], [0.8, 0.55], [0.2, 0.85], [-0.6, 0.88]]) { // little printed flowers
+    const r = rAt(f) + 0.012, y = t.y1 - (t.y1 - t.y0) * f;
+    P.push(ball([Math.sin(a) * r, y, Math.cos(a) * r + (t.z || 0)], 0.04, sp.flowers, [1, 1, 0.4]));
+  }
   P.push(limb([0, t.y1, hz * 0.3], [0, sp.headY - sp.headR * 0.75, hz], sp.neck * 1.1, sp.neck, SKIN));
   if (!sp.noHead) P.push(...headParts(sp));
   for (const A of sp.arms || []) P.push(...armParts(sp, A));
@@ -1086,21 +1090,53 @@ function body(sp) {
 }
 function headParts(sp) { // head, face and hair
   const P = [], hy = sp.headY, hr = sp.headR, hz = sp.headZ || 0;
-  P.push(ball([0, hy, hz], hr, SKIN, [0.94, 1.04, 0.98]));
-  for (const sx of [-1, 1]) {
-    P.push(part(BOX(hr * 0.13, hr * 0.14, 0.02), '#2a2422', [sx * hr * 0.33, hy + hr * 0.06, hz + hr * 0.92]));            // eyes
-    P.push(part(BOX(hr * 0.3, hr * 0.06, 0.03), sp.brow, [sx * hr * 0.33, hy + hr * 0.28, hz + hr * 0.88], [0, 0, sx * 0.12])); // brows
-    P.push(ball([sx * hr * 0.95, hy, hz], hr * 0.16, SKIN, [0.5, 1, 0.8]));                                                    // ears
+  const at = (x, y, z) => [x * hr, hy + y * hr, hz + z * hr];   // positions in head radii from the head's centre
+  P.push(ball([0, hy, hz], hr, SKIN, sp.face === 'child' ? [0.98, 1, 0.98] : [0.94, 1.04, 0.98]));
+  for (const sx of [-1, 1]) P.push(ball(at(sx * 0.95, 0, 0), hr * 0.16, SKIN, [0.5, 1, 0.8]));                                  // ears
+  if (sp.face === 'child') { // big dark eyes with a catch-light, thin arched brows, pink cheeks, a small smile
+    for (const sx of [-1, 1]) {
+      P.push(ball(at(sx * 0.32, 0.02, 0.9), hr * 0.11, '#231d1c', [0.85, 1.12, 0.5]));
+      P.push(ball(at(sx * 0.32 + 0.04, 0.08, 0.98), hr * 0.035, '#ffffff'));
+      P.push(part(BOX(hr * 0.24, hr * 0.04, 0.02), sp.brow, at(sx * 0.32, 0.3, 0.9), [0, 0, -sx * 0.18]));
+      P.push(ball(at(sx * 0.52, -0.22, 0.8), hr * 0.13, '#f0a49c', [1, 0.6, 0.3]));
+      P.push(part(BOX(hr * 0.1, hr * 0.035, 0.02), '#b5524a', at(sx * 0.085, -0.4, 0.9), [0, 0, sx * 0.4]));     // corners of the smile
+    }
+    P.push(ball(at(0, -0.14, 0.99), hr * 0.06, '#e3b89a'));                                                        // small nose
+    P.push(part(BOX(hr * 0.09, hr * 0.035, 0.02), '#b5524a', at(0, -0.43, 0.9)));                                  // middle of the smile
+  } else { // an old man's face: eyes creased shut in a smile, laughter lines, bushy white brows, moustache
+    for (const sx of [-1, 1]) {
+      P.push(part(BOX(hr * 0.12, hr * 0.035, 0.02), '#2a2422', at(sx * 0.3, 0.07, 0.93), [0, 0, 0.45]));
+      P.push(part(BOX(hr * 0.12, hr * 0.035, 0.02), '#2a2422', at(sx * 0.38, 0.07, 0.91), [0, 0, -0.45]));
+      P.push(part(BOX(hr * 0.1, hr * 0.02, 0.02), '#c49f80', at(sx * 0.6, 0.02, 0.77), [0, 0, sx * 0.3]));      // laughter lines
+      P.push(part(BOX(hr * 0.1, hr * 0.02, 0.02), '#c49f80', at(sx * 0.6, -0.08, 0.77), [0, 0, -sx * 0.2]));
+      P.push(part(BOX(hr * 0.36, hr * 0.1, hr * 0.08), sp.brow, at(sx * 0.34, 0.3, 0.86), [0, 0, -sx * 0.2]));  // bushy brows
+      P.push(ball(at(sx * 0.13, -0.3, 0.92), hr * 0.14, WHITE, [1.5, 0.55, 0.6]));                             // moustache
+    }
+    P.push(ball(at(0, -0.12, 0.97), hr * 0.1, '#dcb596'));                                                         // nose
   }
-  P.push(part(BOX(hr * 0.14, hr * 0.22, hr * 0.16), '#dcb596', [0, hy - hr * 0.1, hz + hr * 0.97]));                          // nose
-  P.push(part(BOX(hr * 0.26, hr * 0.04, 0.02), '#b56f62', [0, hy - hr * 0.42, hz + hr * 0.86]));                              // mouth
-  if (sp.hair === 'white') { // white hair round the back and sides, white beard
-    P.push(ball([0, hy + hr * 0.2, hz - hr * 0.24], hr * 1.04, WHITE, [1, 0.8, 1]));
-    P.push(ball([0, hy - hr * 0.62, hz + hr * 0.55], hr * 0.42, WHITE, [1.1, 1, 0.75]));
-  } else { // dark hair with a fringe, two buns tied with red cord
-    P.push(ball([0, hy + hr * 0.24, hz - hr * 0.2], hr * 1.05, HAIR, [1, 0.84, 1]));
-    P.push(part(BOX(hr * 1.3, hr * 0.24, hr * 0.3), HAIR, [0, hy + hr * 0.6, hz + hr * 0.66]));
-    for (const sx of [-1, 1]) { P.push(ball([sx * hr * 0.8, hy + hr * 0.62, hz - hr * 0.1], hr * 0.34, HAIR), ball([sx * hr * 0.6, hy + hr * 0.42, hz - hr * 0.05], hr * 0.1, '#c33a33')); }
+  if (sp.hair === 'white') { // white hair round the back and sides, a long white beard, an old felt hat
+    P.push(ball(at(0, 0.2, -0.24), hr * 1.04, WHITE, [1, 0.8, 1]));
+    P.push(ball(at(0, -0.72, 0.52), hr * 0.46, WHITE, [1.1, 1.25, 0.75]), ball(at(0, -1.18, 0.44), hr * 0.3, WHITE, [1, 1.2, 0.7]));
+    if (sp.hat) {
+      P.push(part(CYL(hr * 0.78, hr * 0.94, hr * 0.55, 12), '#5a4636', at(0, 0.74, -0.05)));
+      P.push(part(CYL(hr * 0.95, hr * 0.95, hr * 0.13, 12), '#3b2e24', at(0, 0.53, -0.05)));
+      P.push(part(CYL(hr * 1.28, hr * 1.28, hr * 0.06, 14), '#5a4636', at(0, 0.47, -0.02), [-0.08, 0, 0]));
+    }
+  } else { // dark hair: a soft fringe, a lock down each side, two plaits over her shoulders tied with red bows
+    P.push(ball(at(0, 0.22, -0.18), hr * 1.06, HAIR, [1, 0.86, 1]));
+    for (const sx of [-1, 0, 1]) P.push(part(BOX(hr * 0.5, hr * 0.32, hr * 0.3), HAIR, at(sx * 0.4, 0.55, 0.72), [0.2, 0, -sx * 0.1]));
+    for (const sx of [-1, 1]) {
+      P.push(part(BOX(hr * 0.24, hr * 0.62, hr * 0.42), HAIR, at(sx * 0.82, 0.05, 0.12)));
+      // the plait: a chain of small beads from behind the ear, over the shoulder, down to the chest
+      const pts = [[0.74, -0.2, -0.12], [0.84, -0.7, 0.08], [0.78, -1.05, 0.62], [0.64, -1.85, 1.08]];
+      for (let s = 0; s < pts.length - 1; s++) for (let k = 0; k < 5; k++) {
+        const u = k / 5, a = pts[s], b = pts[s + 1], wob = (k % 2 ? 0.04 : -0.04);
+        P.push(ball(at(sx * (a[0] + (b[0] - a[0]) * u) + wob, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u), hr * 0.14, HAIR));
+      }
+      const end = at(sx * 0.64, -1.95, 1.1);
+      P.push(ball(end, hr * 0.07, '#d8343a'));
+      P.push(ball([end[0] - hr * 0.13, end[1], end[2]], hr * 0.11, '#d8343a', [1.2, 0.7, 0.4]), ball([end[0] + hr * 0.13, end[1], end[2]], hr * 0.11, '#d8343a', [1.2, 0.7, 0.4]));
+    }
   }
   return P;
 }
@@ -1122,7 +1158,7 @@ function rigPerson(sp, movingArm, scale = 1) {
   return g;
 }
 const OLD_MAN = { coat: '#5d6470', trim: '#3a3f48', trousers: '#3b3a44', shoe: '#2a2420', foot: [0.22, 0.14, 0.42], thigh: 0.15,
-  neck: 0.1, headR: 0.3, brow: WHITE, hair: 'white', arm: 0.1, hand: 0.1 };
+  neck: 0.1, headR: 0.3, brow: WHITE, hair: 'white', face: 'old', hat: true, arm: 0.1, hand: 0.1 };
 const geoGrandpaStand = body({ ...OLD_MAN, torso: { y0: 1.02, y1: 2.2, r0: 0.5, r1: 0.37 }, headY: 2.6,
   legs: [[[0.17, 1.25, 0], [0.18, 0.68, 0.04], [0.18, 0.16, 0]], [[-0.17, 1.25, 0], [-0.18, 0.68, 0.02], [-0.18, 0.16, 0]]],
   arms: [[[0.44, 2.08, 0], [0.56, 1.68, 0.16], [0.6, 1.4, 0.38]], [[-0.44, 2.08, 0], [-0.52, 1.62, 0.04], [-0.5, 1.2, 0.1]]],
@@ -1132,8 +1168,9 @@ const GRANDPA_SIT = { ...OLD_MAN, torso: { y0: 0.66, y1: 1.8, r0: 0.43, r1: 0.37
   legs: [[[0.17, 0.74, 0.05], [0.19, 0.76, 0.58], [0.19, 0.16, 0.64]], [[-0.17, 0.74, 0.05], [-0.19, 0.76, 0.58], [-0.19, 0.16, 0.64]]],
   arms: [[[0.44, 1.68, 0.08], [0.5, 1.24, 0.28], [0.3, 0.92, 0.52]], [[-0.44, 1.68, 0.08], [-0.5, 1.24, 0.28], [-0.3, 0.92, 0.52]]] };
 // the girl: a child's proportions, red padded jacket
-const GIRL = { coat: '#c0504a', trim: '#8c2f2b', trousers: '#3b3a44', shoe: '#3a2a24', foot: [0.18, 0.12, 0.32], thigh: 0.13,
-  neck: 0.09, headR: 0.4, headY: 2.22, brow: HAIR, hair: 'dark', arm: 0.09, hand: 0.09, torso: { y0: 0.72, y1: 1.82, r0: 0.48, r1: 0.32 } };
+// a red padded jacket, a little longer and flared like a small dress, a white collar, small white flowers on it, red cloth shoes
+const GIRL = { coat: '#c8444a', trim: '#8c2f2b', collar: '#f4efe6', flowers: '#fbeee8', trousers: '#3b3a44', shoe: '#b8323a', foot: [0.17, 0.11, 0.3], thigh: 0.12,
+  neck: 0.09, headR: 0.4, headY: 2.22, brow: HAIR, hair: 'dark', face: 'child', arm: 0.085, hand: 0.08, torso: { y0: 0.62, y1: 1.82, r0: 0.54, r1: 0.31 } };
 const GIRL_LEGS = [[[0.15, 0.8, 0], [0.16, 0.45, 0.03], [0.16, 0.14, 0]], [[-0.15, 0.8, 0], [-0.16, 0.45, 0.02], [-0.16, 0.14, 0]]];
 const GIRL_ARMS_DOWN = [[[0.34, 1.74, 0], [0.42, 1.42, 0.04], [0.42, 1.12, 0.1]], [[-0.34, 1.74, 0], [-0.42, 1.42, 0.04], [-0.42, 1.12, 0.1]]];
 const geoGirlStand = body({ ...GIRL, legs: GIRL_LEGS, arms: GIRL_ARMS_DOWN });
@@ -1249,7 +1286,7 @@ function animatePeople(dt) {
   const k = Math.min(1, dt * 2.6);
   for (const key in pose) pose[key] = lerp(pose[key], poseT[key], k);
   const g = girlRaise.userData, p = gpSit.userData;
-  g.head.rotation.set(pose.gPitch, pose.gYaw, 0);
+  g.head.rotation.set(pose.gPitch, pose.gYaw, 0.1); // her head always a little to one side
   g.arm.rotation.set(pose.gArm, 0, pose.gWave * Math.sin(now * 7) * 0.16);
   p.head.rotation.set(pose.pPitch + pose.pNod * Math.sin(now * 5.5) * 0.12, pose.pYaw, 0);
   p.arm.rotation.set(pose.pArm, 0, 0);
