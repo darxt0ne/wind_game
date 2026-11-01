@@ -1090,7 +1090,8 @@ const geoGrandpaStand = body({ ...OLD_MAN, torso: { y0: 1.02, y1: 2.2, r0: 0.5, 
   legs: [[[0.17, 1.25, 0], [0.18, 0.68, 0.04], [0.18, 0.16, 0]], [[-0.17, 1.25, 0], [-0.18, 0.68, 0.02], [-0.18, 0.16, 0]]],
   arms: [[[0.44, 2.08, 0], [0.56, 1.68, 0.16], [0.6, 1.4, 0.38]], [[-0.44, 2.08, 0], [-0.52, 1.62, 0.04], [-0.5, 1.2, 0.1]]],
   extra: [limb([0.63, 0.0, 0.48], [0.6, 1.42, 0.38], 0.035, 0.032, '#7a5a3c'), limb([0.6, 1.42, 0.38], [0.48, 1.5, 0.38], 0.035, 0.035, '#7a5a3c')] });
-const geoGrandpaSit = body({ ...OLD_MAN, torso: { y0: 0.66, y1: 1.8, r0: 0.5, r1: 0.37, lean: 0.08, z: 0.06 }, headY: 2.16, headZ: 0.1,
+// seated, the hem is drawn in and he sits a little forward, so his jacket stays clear of the chair back
+const geoGrandpaSit = body({ ...OLD_MAN, torso: { y0: 0.66, y1: 1.8, r0: 0.43, r1: 0.37, lean: 0.08, z: 0.12 }, headY: 2.16, headZ: 0.1,
   legs: [[[0.17, 0.74, 0.05], [0.19, 0.76, 0.58], [0.19, 0.16, 0.64]], [[-0.17, 0.74, 0.05], [-0.19, 0.76, 0.58], [-0.19, 0.16, 0.64]]],
   arms: [[[0.44, 1.68, 0.08], [0.5, 1.24, 0.28], [0.3, 0.92, 0.52]], [[-0.44, 1.68, 0.08], [-0.5, 1.24, 0.28], [-0.3, 0.92, 0.52]]] });
 // the girl: a child's proportions, red padded jacket
@@ -1163,10 +1164,12 @@ const famStool = figure((() => {
   // the back: the rear legs carry on up as two posts leaning a little back, a curved top rail across them,
   // one upright splat in the middle and a low rail under it
   for (const sx of [-1, 1]) parts.push(limb([sx * 0.36, 0.56, -0.36], [sx * 0.35, 1.52, -0.5], 0.042, 0.034, '#6b4e33'));
-  parts.push(part(BOX(0.86, 0.075, 0.07), '#7d5c3e', [0, 1.5, -0.5], [0.15, 0, 0]),                  // top rail
-    part(BOX(0.94, 0.04, 0.05), '#7d5c3e', [0, 1.55, -0.51], [0.15, 0, 0]),                           // its slightly longer cap
-    part(BOX(0.3, 0.62, 0.035), '#86643f', [0, 1.12, -0.45], [0.15, 0, 0]),                            // splat
-    part(BOX(0.7, 0.05, 0.04), '#6a4c32', [0, 0.78, -0.4], [0.15, 0, 0]));                             // low rail
+  // everything on the back leans back at the same angle as the posts (0.14 back over 0.96 up), and sits on their line
+  const lean = -Math.atan2(0.14, 0.96), onPost = y => -0.36 - (y - 0.56) * 0.14 / 0.96;
+  parts.push(part(BOX(0.86, 0.075, 0.07), '#7d5c3e', [0, 1.49, onPost(1.49)], [lean, 0, 0]),         // top rail
+    part(BOX(0.94, 0.035, 0.08), '#7d5c3e', [0, 1.545, onPost(1.545)], [lean, 0, 0]),                  // its slightly longer cap
+    part(BOX(0.3, 0.6, 0.03), '#86643f', [0, 1.13, onPost(1.13)], [lean, 0, 0]),                        // splat, between the rails
+    part(BOX(0.7, 0.05, 0.045), '#6a4c32', [0, 0.8, onPost(0.8)], [lean, 0, 0]));                       // low rail
   return merge(parts);
 })());
 const famGrandpa = new THREE.Group(), gpSit = figure(geoGrandpaSit), gpStand = figure(geoGrandpaStand);
@@ -1183,6 +1186,15 @@ const stoolSnow = figure(merge([ // a soft cap of snow on the seat, a little on 
 ])); stoolSnow.visible = false; famStool.add(stoolSnow);
 // in winter a pinwheel stands on his stool, facing the valley
 const stoolPin = makePinwheel(); stoolPin.g.position.set(0, 0.7, 0); stoolPin.g.scale.setScalar(1.2); stoolPin.g.visible = false; famStool.add(stoolPin.g);
+// and his cane, left leaning against the chair: tip in the snow, its crook hooked over the back post, snow on the crook
+const stoolCane = figure(merge([
+  limb([0.66, -0.05, 0.06], [0.42, 1.22, -0.42], 0.03, 0.034, '#7a5a3c'),
+  limb([0.42, 1.22, -0.42], [0.4, 1.33, -0.47], 0.034, 0.034, '#7a5a3c'),
+  limb([0.4, 1.33, -0.47], [0.31, 1.36, -0.49], 0.034, 0.034, '#7a5a3c'),
+  limb([0.31, 1.36, -0.49], [0.26, 1.27, -0.48], 0.034, 0.03, '#7a5a3c'),
+  ball([0.36, 1.39, -0.48], 0.05, '#eef2f8', [1.4, 0.6, 1]),
+]));
+stoolCane.visible = false; famStool.add(stoolCane);
 let gpLook = false;
 let girlYaw = FAM.yaw, girlReact = 0, girlReactCD = 0, girlRun = null;
 function setFamily(mode) {
@@ -1205,7 +1217,7 @@ function setFamily(mode) {
   girlRaise.visible = M[1] === 'stand' && M[2]; girlStand.visible = M[1] === 'stand' && !M[2]; // with the pinwheel she holds it up
   famGirl.position.copy(girl); famGirl.rotation.y = girlYaw = yaw;
   pin.g.visible = M[2];
-  stoolSnow.visible = stoolPin.g.visible = mode === 'winter';
+  stoolSnow.visible = stoolPin.g.visible = stoolCane.visible = mode === 'winter';
   famGirl.scale.setScalar(1); gpLook = false;
   girlRun = null;
 }
