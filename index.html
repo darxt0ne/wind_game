@@ -1164,14 +1164,18 @@ function setupAutumn() {
 // ---------------------------------------------------------------- grandfather & granddaughter
 // the height of the ground as it is actually drawn (the terrain is faceted, so between grid points
 // it can sit a little below the smooth height function); people and the stool stand on this
-const groundRay = new THREE.Raycaster(), DOWN = new THREE.Vector3(0, -1, 0);
-terrain.updateMatrixWorld();
+// read straight off the terrain grid: find the cell, pick the triangle PlaneGeometry split it into
+// (diagonal from (x0,z1) to (x1,z0)) and interpolate on that plane — same answer as a raycast, without
+// testing a hundred thousand triangles every call
+const STEP = SIZE / SEG;
 function groundAt(x, z) {
-  groundRay.set(_gp.set(x, 400, z), DOWN);
-  const hit = groundRay.intersectObject(terrain, false)[0];
-  return Math.max(hit ? hit.point.y : H(x, z), WATER);
+  const gx = (x + SIZE / 2) / STEP, gz = (z + SIZE / 2) / STEP;
+  if (gx < 0 || gz < 0 || gx >= SEG || gz >= SEG) return Math.max(H(x, z), WATER);
+  const ix = Math.floor(gx), iz = Math.floor(gz), fx = gx - ix, fz = gz - iz, R = SEG + 1;
+  const ya = tPos.getY(iz * R + ix), yb = tPos.getY((iz + 1) * R + ix), yc = tPos.getY((iz + 1) * R + ix + 1), yd = tPos.getY(iz * R + ix + 1);
+  const y = fx + fz <= 1 ? ya + (yd - ya) * fx + (yb - ya) * fz : yc + (yb - yc) * (1 - fx) + (yd - yc) * (1 - fz);
+  return Math.max(y, WATER);
 }
-const _gp = new THREE.Vector3();
 const FAM = (() => {
   const F = new THREE.Vector3(Math.sign(riverX(OLD.z) - OLD.x) || -1, 0, 0);
   const at = (f, l) => { const x = OLD.x + F.x * f, z = OLD.z + l; return new THREE.Vector3(x, groundAt(x, z), z); };
@@ -1992,7 +1996,7 @@ function loop() {
 loop();
 
 // debug hook for testing
-window.__wind = { get now() { return now; }, get cine() { return cine; }, get pinDone() { return pinDone; }, FAM, OPENING, herWalk, peek: (from, at) => { cine = { pos: new THREE.Vector3(...from), look: new THREE.Vector3(...at), k: 40 }; }, unpeek: () => { cine = null; }, player, scene, get stage() { return stage; }, startChapter, lastLantern, famGirl, counts: () => ({ trees: trees.length, shrubs: shrubs.length, tufts: tufts.length }), get targets() { return targets; }, get state() { return state; }, get chapter() { return chapter; }, step };
+window.__wind = { get now() { return now; }, get cine() { return cine; }, get pinDone() { return pinDone; }, FAM, OPENING, herWalk, peek: (from, at) => { cine = { pos: new THREE.Vector3(...from), look: new THREE.Vector3(...at), k: 40 }; }, unpeek: () => { cine = null; }, player, scene, get stage() { return stage; }, startChapter, lastLantern, famGirl, counts: () => ({ trees: trees.length, shrubs: shrubs.length, tufts: tufts.length }), get targets() { return targets; }, get state() { return state; }, get chapter() { return chapter; }, step, groundAt, terrain };
 </script>
 </body>
 </html>
