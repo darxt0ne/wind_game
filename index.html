@@ -124,14 +124,22 @@ function H(x, z) {
 }
 const WATER = 2.5;
 
+// The soft round glow used for mist, clouds, halos and the wind itself: pure white everywhere, with only the
+// alpha falling off from the centre. It is computed pixel by pixel rather than drawn on a 2D canvas: Safari on
+// iPhone keeps canvas pixels premultiplied at low precision, so the nearly transparent edge pixels came back
+// as random bright colours, and a dozen layers of mist turned them into a screen full of coloured specks.
 function softTexture() {
-  const c = document.createElement('canvas'); c.width = c.height = 128;
-  const g = c.getContext('2d');
-  const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
-  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.4, 'rgba(255,255,255,0.55)');
-  gr.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+  const N = 128, data = new Uint8Array(N * N * 4);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const r = Math.min(1, Math.hypot(x + 0.5 - N / 2, y + 0.5 - N / 2) / (N / 2));
+    const a = r < 0.4 ? 1 - r / 0.4 * 0.45 : 0.55 * (1 - (r - 0.4) / 0.6); // 1 at the centre, 0.55 at 40%, 0 at the edge
+    const i = (y * N + x) * 4;
+    data[i] = data[i + 1] = data[i + 2] = 255; data[i + 3] = Math.round(a * 255);
+  }
+  const t = new THREE.DataTexture(data, N, N, THREE.RGBAFormat);
+  t.colorSpace = THREE.SRGBColorSpace; t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter;
+  t.generateMipmaps = true; t.needsUpdate = true;
+  return t;
 }
 const SOFT = softTexture();
 
