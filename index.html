@@ -111,7 +111,7 @@ function slopeH(x, z) {
   const ridge = 1 - Math.abs(fbm(x * 0.0021 + 3, z * 0.0021 + 8) * 2 - 1);
   let h = 7 + (n * 120 + ridge * 60 - 40) * smooth(20, 190, d);
   h = Math.max(h, 7 + n * 6);
-  h += smooth(420, 760, r) * 150;
+  h += smooth(420, 760, r) * 150 * smooth(30, 140, d); // the ring of mountains opens where the river runs, so it flows on out of the valley
   h -= (1 - smooth(6, 26, d)) * 9;
   return h;
 }
@@ -253,16 +253,39 @@ function paintTerrain() {
   tGeo.attributes.color.needsUpdate = true;
 }
 
-const waterTime = { value: 0 };
+const waterTime = { value: 0 }, waterGlint = { value: 1 };
 const waterMat = new THREE.MeshPhongMaterial({ color: pal.water.clone(), transparent: true, opacity: 0.86, flatShading: true,
   shininess: 60, specular: 0x4a4a46, depthWrite: false });
+// The river moves: soft ripples drift downstream along the channel, sunlight glints off it here and there and
+// twinkles, and a thin line of foam slides along the banks. (The channel's centre line is riverX(z), as in JS.)
 waterMat.onBeforeCompile = sh => {
-  sh.uniforms.uTime = waterTime;
-  sh.vertexShader = 'uniform float uTime;\n' + sh.vertexShader.replace('#include <begin_vertex>',
-    `vec3 transformed = vec3(position); vec4 wp0 = modelMatrix * vec4(position, 1.);
+  sh.uniforms.uTime = waterTime; sh.uniforms.uGlint = waterGlint;
+  sh.vertexShader = 'uniform float uTime;\nvarying vec3 vW;\n' + sh.vertexShader.replace('#include <begin_vertex>',
+    `vec3 transformed = vec3(position); vec4 wp0 = modelMatrix * vec4(position, 1.); vW = wp0.xyz;
      transformed.z += (sin(wp0.x * 0.16 + uTime * 1.1) + cos(wp0.z * 0.13 + uTime * 0.8) + sin((wp0.x + wp0.z) * 0.31 + uTime * 1.7) * 0.5) * 0.16;`);
+  sh.fragmentShader = `uniform float uTime; uniform float uGlint; varying vec3 vW;
+    float wh(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+    float wn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f);
+      return mix(mix(wh(i), wh(i + vec2(1., 0.)), f.x), mix(wh(i + vec2(0., 1.)), wh(i + vec2(1., 1.)), f.x), f.y); }
+    float riverX(float z) { return 70. * sin(z * 0.0055) + 25. * sin(z * 0.017 + 1.3); }
+    ` + sh.fragmentShader.replace('#include <opaque_fragment>', `#include <opaque_fragment>
+    {
+      float across = vW.x - riverX(vW.z), along = vW.z;
+      // ripples carried downstream: two layers of soft noise stretched along the current, drifting at different speeds
+      vec2 q = vec2(across * 0.22, along * 0.06 - uTime * 0.32);
+      float rip = wn(q) * wn(q * vec2(2.3, 1.8) + vec2(3.1, -uTime * 0.21));
+      gl_FragColor.rgb += vec3(0.09, 0.11, 0.11) * smoothstep(0.3, 0.72, rip) * (0.5 + 0.5 * uGlint);
+      // glints of sun on the water, coming and going
+      vec2 g = vec2(across * 2.2, along * 1.3 - uTime * 0.9);
+      float sp = wn(g) * wn(g * 1.9 + vec2(uTime * 0.7, 0.));
+      gl_FragColor.rgb += vec3(1., 0.96, 0.86) * smoothstep(0.7, 0.78, sp) * 0.42 * uGlint; // few, small and soft: glints, not flecks
+      // a thin line of foam along each bank, sliding downstream with the water
+      float bank = smoothstep(10.5, 14.5, abs(across)) * (1. - smoothstep(14.5, 18.5, abs(across)));
+      float foam = wn(vec2(across * 0.9, along * 0.22 - uTime * 0.45));
+      gl_FragColor.rgb += vec3(0.85, 0.88, 0.86) * bank * smoothstep(0.45, 0.8, foam) * 0.3;
+    }`);
 };
-const water = new THREE.Mesh(new THREE.PlaneGeometry(1300, 1300, 200, 200), waterMat);
+const water = new THREE.Mesh(new THREE.PlaneGeometry(SIZE, SIZE, 260, 260), waterMat); // out to the edge of the land: the river runs on into the haze
 water.rotation.x = -Math.PI / 2; water.position.y = WATER; water.renderOrder = -1; water.receiveShadow = true; scene.add(water);
 
 // ---- small geometry kit: bake a flat vertex colour into each part, then merge parts into one mesh
@@ -1092,7 +1115,9 @@ function setupAutumn() {
     const a = rand() * 6.28, r = 55 + rand() * 120, x = VX + Math.cos(a) * r, z = VZ + Math.sin(a) * r;
     const y = groundOK(x, z, 2.2); if (y === null || y > 45) continue;
     if (Math.abs(x - riverX(z)) < 24 || houseSpots.some(h => Math.hypot(h.x - x, h.z - z) < 16)) continue;
-    if (!canPlant(x, z, 10) || spots.some(sp => Math.hypot(sp.x - x, sp.z - z) < 32)) continue;
+    if (spots.some(sp => Math.hypot(sp.x - x, sp.z - z) < 32)) continue;
+    // grain is dried out in the open: no tree within twenty metres, and not inside a grove
+    if (forestN(x, z) > 0.5 || trees.some(t => (t.x - x) ** 2 + (t.z - z) ** 2 < 400)) continue;
     // the platform's top sits level with the highest ground under it, so it never floats; only fairly flat spots
     const ring = [0, ...Array.from({ length: 10 }, (_, i) => i)].map((_, i) => i === 0 ? groundAt(x, z) : groundAt(x + Math.cos(i * 0.63) * 7, z + Math.sin(i * 0.63) * 7));
     const hi = Math.max(...ring), lo = Math.min(...ring); if (hi - lo > 1.6) continue;
@@ -1779,7 +1804,7 @@ paintTerrain(); paintTrees(); applyPalette();
 function applyPalette() {
   skyMat.uniforms.top.value.copy(pal.skyTop); skyMat.uniforms.hor.value.copy(pal.skyHor);
   scene.fog.color.copy(pal.fog); renderer.setClearColor(pal.fog);
-  waterMat.color.copy(pal.water);
+  waterMat.color.copy(pal.water); waterGlint.value = clamp(pal.sunI / 2.5, 0.15, 1); // glints follow the light: bright by day, faint at night
   sun.color.copy(pal.sun); sun.intensity = pal.sunI;
   hemi.color.copy(pal.hemiSky); hemi.groundColor.copy(pal.hemiGround); hemi.intensity = pal.hemiI;
   cloudMat.color.copy(pal.cloud); cloudMat.opacity = pal.cloudO;
