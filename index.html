@@ -553,17 +553,46 @@ for (let row = 0; row < 3; row++) {
   }
 }
 
-// stone arch bridge just downstream of the village
+// a stone humpback bridge just downstream of the village: an arch ring of dressed stones, a stepped deck that
+// follows the hump, a projecting kerb along each edge, a balustrade of capped posts and panels, and abutments
+// running into the banks. Local frame: x along the span, y up from the water, z across the deck.
 {
   const bz = VZ - 52, bx = riverX(bz);
-  const L = 22, R = 12, top = 9.5, sh = new THREE.Shape();
+  const L = 22, R = 12, top = 9.5, W2 = 2.5, sh = new THREE.Shape();
+  const rise = (top - 4 + 3.2) * 0.5, deckY = x => 4 + (1 - (x / L) ** 2) * rise, slope = x => -2 * x / (L * L) * rise;
   sh.moveTo(-L, -3); sh.lineTo(-L, 4); sh.quadraticCurveTo(0, top + 3.2, L, 4); sh.lineTo(L, -3); sh.lineTo(R, -3);
   sh.absarc(0, -3, R, 0, Math.PI, false); sh.closePath();
-  const arch = new THREE.ExtrudeGeometry(sh, { depth: 5, bevelEnabled: false, curveSegments: 18 }); arch.translate(0, 0, -2.5);
-  const parts = [bake(arch, '#a39e92')];
-  for (const side of [-2.6, 2.6]) for (let i = -9; i <= 9; i++) {
-    const px = i * 2.2, py = 4 + (1 - (px / L) ** 2) * (top - 4 + 3.2) * 0.5 + 0.2;
-    parts.push(part(BOX(0.35, 1.3, 0.35), '#8d887d', [px, py + 0.65, side]));
+  const arch = new THREE.ExtrudeGeometry(sh, { depth: W2 * 2, bevelEnabled: false, curveSegments: 24 }); arch.translate(0, 0, -W2);
+  const parts = [bake(arch, '#a8a296')];
+  // the arch ring: voussoirs round the opening, alternating a shade lighter and darker, standing slightly proud
+  const NV = 19;
+  for (let i = 0; i < NV; i++) {
+    const a = (i + 0.5) / NV * Math.PI, rr = R + 0.5, len = Math.PI * rr / NV * 0.93;
+    parts.push(part(BOX(len, 1.0, W2 * 2 + 0.16), i === (NV - 1) / 2 ? '#c9c3b5' : i % 2 ? '#b3ad9f' : '#bfb9ab',
+      [Math.cos(a) * rr, -3 + Math.sin(a) * rr, 0], [0, 0, a - Math.PI / 2]));
+  }
+  // stone steps up and over the hump
+  for (let x = -L + 0.55; x < L; x += 1.1) parts.push(part(BOX(1.12, 0.22, W2 * 2 - 0.3), Math.round(x / 1.1) % 2 ? '#b8b2a6' : '#aea89c', [x, deckY(x) + 0.08, 0]));
+  // a kerb projecting a little along both edges, following the curve of the deck
+  for (let x = -L + 0.6; x < L; x += 1.2) for (const sz of [-1, 1])
+    parts.push(part(BOX(1.24, 0.28, 0.42), '#9d978b', [x, deckY(x) - 0.3, sz * (W2 + 0.08)], [0, 0, Math.atan(slope(x))]));
+  // the balustrade: capped posts, and a carved panel between each pair, all following the hump
+  const posts = []; for (let x = -L + 0.4; x <= L - 0.39; x += 2.4) posts.push(x);
+  for (const sz of [-1, 1]) {
+    posts.forEach(x => {
+      parts.push(part(BOX(0.34, 1.3, 0.34), '#a29c90', [x, deckY(x) + 0.75, sz * (W2 - 0.2)]));
+      parts.push(part(new THREE.IcosahedronGeometry(0.22, 1), '#b5afa2', [x, deckY(x) + 1.5, sz * (W2 - 0.2)], [], [1, 1.25, 1])); // the post's cap
+    });
+    for (let i = 0; i < posts.length - 1; i++) {
+      const xm = (posts[i] + posts[i + 1]) / 2;
+      parts.push(part(BOX(2.04, 0.72, 0.16), '#aaa498', [xm, deckY(xm) + 0.62, sz * (W2 - 0.2)], [0, 0, Math.atan(slope(xm))]));
+      parts.push(part(BOX(1.5, 0.36, 0.05), '#9b958a', [xm, deckY(xm) + 0.62, sz * (W2 - 0.12)], [0, 0, Math.atan(slope(xm))]));   // its sunk panel
+    }
+  }
+  // abutments: dressed-stone blocks running from each end of the bridge into the bank
+  for (const sx of [-1, 1]) {
+    parts.push(part(BOX(4.5, 7.5, W2 * 2 + 1.4), '#9f998d', [sx * (L + 2.1), 0.4, 0]));
+    parts.push(part(BOX(4.7, 0.3, W2 * 2 + 1.6), '#b2ac9f', [sx * (L + 2.1), 4.2, 0]));
   }
   const m = new THREE.Mesh(merge(parts), kitMat);
   const dz = riverX(bz + 1) - riverX(bz - 1);
@@ -771,62 +800,130 @@ function setupSpring() {
 
 // 清明: lift the kites
 const kiteColors = [0xd9534f, 0xf0b429, 0x3f7cbf, 0x5aa36a, 0xe07aa0, 0xef8a3c];
-function makeKite(color, tailColor) {
-    // an original paper kite: wide wings, a painted centre, two ribbon tails
-    const wing = new THREE.Shape();
-    const pts = [[0, 2.1], [0.55, 1.35], [2.5, 1.45], [2.1, 0.55], [0.9, 0.15], [1.3, -1.0], [0.25, -0.75], [0, -1.3]];
-    wing.moveTo(0, 2.1); pts.slice(1).forEach(([a, b]) => wing.lineTo(a, b)); [...pts].reverse().slice(1).forEach(([a, b]) => wing.lineTo(-a, b));
-    const kc = '#' + new THREE.Color(color).getHexString();
-    const kite = new THREE.Mesh(merge([
-      bake(new THREE.ShapeGeometry(wing), kc),
-      part(new THREE.CircleGeometry(0.55, 12), '#fbf6ea', [0, 0.7, 0.02]),
-      part(new THREE.CircleGeometry(0.28, 10), '#2f2f35', [0, 0.7, 0.03]),
-      part(new THREE.CircleGeometry(0.4, 3), '#fbf6ea', [1.45, 0.95, 0.02], [0, 0, 0.3]),
-      part(new THREE.CircleGeometry(0.4, 3), '#fbf6ea', [-1.45, 0.95, 0.02], [0, 0, -0.3]),
-      part(BOX(0.06, 3.4, 0.06), '#5b4a3c', [0, 0.4, -0.05]),
-      part(BOX(4.6, 0.06, 0.06), '#5b4a3c', [0, 1.1, -0.05], [0, 0, 0.0]),
-    ]), new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }));
-    kite.scale.setScalar(1.7);
-    const tailMat = new THREE.MeshBasicMaterial({ color: tailColor, side: THREE.DoubleSide });
-    const tail = new THREE.Group(); tail.position.y = -1.3; kite.add(tail);
-    for (const sx of [-0.3, 0.3]) { const r = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 4.2), tailMat); r.position.set(sx, -2.1, 0); tail.add(r); }
-    kite.userData.tail = tail;
-    return kite;
+// ---- paper kites in three traditional shapes, the paper bowed back a little over a bamboo frame
+const kiteMat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
+const hexOf = c => '#' + new THREE.Color(c).getHexString();
+function flatShape(pts, color, z = 0) { // a filled outline of [x, y] points, lifted z off the paper
+  const s = new THREE.Shape(); s.moveTo(...pts[0]); pts.slice(1).forEach(p => s.lineTo(...p));
+  return bake(new THREE.ShapeGeometry(s).translate(0, 0, z), color);
 }
+const mirrored = half => [...half, ...[...half].reverse().map(([x, y]) => [-x, y])]; // right half, top to bottom, then the left back up
+const disc = (x, y, r, color, sx = 1, sy = 1, z = 0.01) => part(new THREE.CircleGeometry(r, 20), color, [x, y, z], [], [sx, sy, 1]);
+function makeKite(type, c1, c2, c3) {
+  const P = [], tails = [];
+  if (type === 'swallow') { // swept wings, a forked tail, a painted head and wing bands
+    P.push(flatShape(mirrored([[0, 1.05], [0.22, 0.82], [0.62, 0.95], [1.25, 0.9], [1.6, 0.62], [0.72, 0.3], [0.36, 0.1], [0.66, -0.78], [0.42, -1.08], [0.13, -0.36], [0, -0.42]]), c1));
+    for (const sx of [-1, 1]) {
+      P.push(flatShape([[0.42, 0.78], [1.28, 0.84], [1.42, 0.66], [0.62, 0.5]].map(([x, y]) => [x * sx, y]), c2, 0.01));
+      P.push(flatShape([[0.3, -0.05], [0.56, -0.72], [0.44, -0.9], [0.2, -0.3]].map(([x, y]) => [x * sx, y]), c2, 0.01));
+      P.push(disc(sx * 0.1, 0.82, 0.05, '#222226', 1, 1, 0.03));
+    }
+    P.push(disc(0, 0.78, 0.22, c3, 1, 1, 0.02), disc(0, 0.32, 0.16, c3, 1, 1.6, 0.02));
+  } else if (type === 'butterfly') { // four round wings with spots, a slim body, two feelers, two ribbon tails
+    for (const sx of [-1, 1]) {
+      P.push(disc(sx * 0.62, 0.42, 0.72, c1, 1, 0.82, 0), disc(sx * 0.44, -0.42, 0.48, c1, 1, 0.9, 0));
+      P.push(disc(sx * 0.78, 0.52, 0.26, c2, 1, 1, 0.01), disc(sx * 0.46, -0.44, 0.17, c3, 1, 1, 0.01));
+      P.push(part(BOX(0.025, 0.55, 0.02), '#2a2a2e', [sx * 0.13, 1.08, 0.02], [0, 0, -sx * 0.4]));
+      tails.push({ root: new THREE.Vector3(sx * 0.12, -0.75, 0), color: c2, len: 3.2 });
+    }
+    P.push(disc(0, 0.1, 0.12, '#2a2a2e', 1, 7.5, 0.02));
+  } else { // a diamond in four painted quarters with a round centre, one long tail
+    const T = [0, 1.25], R = [0.88, 0.25], B = [0, -1.05], L = [-0.88, 0.25], O = [0, 0.25];
+    P.push(flatShape([T, R, O], c1), flatShape([R, B, O], c2), flatShape([B, L, O], c1), flatShape([L, T, O], c2), disc(0, 0.25, 0.26, c3, 1, 1, 0.02));
+    tails.push({ root: new THREE.Vector3(0, -1.05, 0), color: c3, len: 4.4 });
+  }
+  P.push(part(BOX(0.035, 2.2, 0.035), '#a88f58', [0, 0.05, -0.03]), part(BOX(2.9, 0.035, 0.035), '#a88f58', [0, 0.62, -0.03])); // bamboo frame
+  const geo = merge(P), p = geo.attributes.position;
+  for (let i = 0; i < p.count; i++) p.setZ(i, p.getZ(i) - 0.14 * p.getX(i) * p.getX(i)); // bow the paper back from the spine
+  geo.computeVertexNormals();
+  const g = new THREE.Group(), m = new THREE.Mesh(geo, kiteMat); m.castShadow = true; g.add(m);
+  g.scale.setScalar(1.5); g.userData.tails = tails;
+  return g;
+}
+// a ribbon tail: a strip that trails behind and below its kite and ripples, rebuilt every frame
+function makeRibbon(color, n = 16, w = 0.16) {
+  const geo = new THREE.BufferGeometry(), idx = [];
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array((n + 1) * 6), 3));
+  for (let i = 0; i < n; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+  geo.setIndex(idx);
+  const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide }));
+  mesh.frustumCulled = false;
+  return { mesh, geo, n, w };
+}
+const _rp = new THREE.Vector3(), _rs = new THREE.Vector3(), _rd = new THREE.Vector3();
+function updateRibbon(rb, root, dir, side, len, ph) {
+  const p = rb.geo.attributes.position, seg = len / rb.n;
+  for (let i = 0; i <= rb.n; i++) {
+    const u = i / rb.n, wave = Math.sin(now * 5.5 - i * 0.7 + ph) * 0.35 * u;
+    _rp.copy(root).addScaledVector(dir, i * seg).addScaledVector(side, wave).add(_rd.set(0, Math.sin(now * 3.1 - i * 0.5 + ph) * 0.12 * u, 0));
+    _rs.copy(side).multiplyScalar(rb.w * (1 - u * 0.4) * 0.5);
+    p.setXYZ(i * 2, _rp.x - _rs.x, _rp.y - _rs.y, _rp.z - _rs.z); p.setXYZ(i * 2 + 1, _rp.x + _rs.x, _rp.y + _rs.y, _rp.z + _rs.z);
+  }
+  p.needsUpdate = true;
+}
+// the children: built like the girl, each with their own jacket and hair, one hand up on the kite line
+const KIDS = [
+  { coat: '#3d6fa8', trim: '#26476e', collar: '#e9e4da', hair: 'boy' }, { coat: '#e0a33a', trim: '#9c6e1e', collar: '#f4efe6', flowers: '#fff6e0', hair: 'bob' },
+  { coat: '#4f8f5a', trim: '#2f5a37', collar: '#e9e4da', hair: 'boy' }, { coat: '#9b5aa8', trim: '#5e3567', collar: '#f4efe6', flowers: '#f6e8fa', hair: 'bob' },
+  { coat: '#d06a3a', trim: '#8a4022', collar: '#e9e4da', hair: 'boy' },
+];
+const KID_ARMS = [[[0.34, 1.74, 0], [0.5, 1.68, 0.3], [0.44, 1.95, 0.58]], [[-0.34, 1.74, 0], [-0.42, 1.42, 0.04], [-0.42, 1.12, 0.1]]];
+const WIND = new THREE.Vector3(0.75, 0, -0.66).normalize(); // the breeze the kites ride, the same for all of them
+const KITE_TYPES = ['swallow', 'butterfly', 'diamond'];
 function setupQingming() {
-  const list = [];
+  const list = [], up = new THREE.Vector3(0, 1, 0), side = new THREE.Vector3(-WIND.z, 0, WIND.x);
   const spots = [[60, 150], [-50, 40], [70, -60], [-60, -180], [55, -300], [-45, 260]];
   spots.forEach(([dx, z], k) => {
-    if (k === 0) z = FAM.girl.z;
-    const x = k === 0 ? FAM.girl.x : riverX(z) + dx, y = H(x, z);
-    const coat = '#' + new THREE.Color(kiteColors[(k + 2) % 6]).getHexString();
-    const child = new THREE.Mesh(merge([
-      part(CYL(0.13, 0.15, 0.7, 5), '#3b3a44', [-0.2, 0.35, 0]), part(CYL(0.13, 0.15, 0.7, 5), '#3b3a44', [0.2, 0.35, 0]),
-      part(CYL(0.38, 0.62, 1.15, 7), coat, [0, 1.25, 0]),
-      part(CYL(0.1, 0.12, 0.85, 5), coat, [0.48, 1.85, 0.1], [0.3, 0, -0.6]),          // arm raised, holding the line
-      part(CYL(0.1, 0.12, 0.75, 5), coat, [-0.45, 1.35, 0], [0, 0, 0.35]),
-      part(new THREE.IcosahedronGeometry(0.42, 1), '#f1d6bd', [0, 2.15, 0]),
-      part(new THREE.IcosahedronGeometry(0.45, 1), '#2e2a28', [0, 2.3, -0.08], [0, 0, 0], [1, 0.75, 1]),
-    ]), kitMat);
-    child.position.set(x, y - 0.1, z); child.rotation.y = rand() * 6; child.scale.setScalar(1.9); child.castShadow = true; child.visible = k !== 0; stage.add(child);
-    const kite = makeKite(kiteColors[k], kiteColors[(k + 1) % 6]), tail = kite.userData.tail;
-    kite.position.set(x + 2, y + 1.2, z); kite.rotation.x = -1.3; stage.add(kite);
-    const lineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
-    const line = new THREE.Line(lineGeo, new THREE.LineBasicMaterial({ color: 0x555555, transparent: true, opacity: 0.55 }));
+    const own = k === 0; // the first kite is hers, flown from beside the old tree
+    if (own) z = FAM.girl.z;
+    const x = own ? FAM.girl.x : riverX(z) + dx, y = groundAt(x, z);
+    let kid = null, handOf;
+    if (own) handOf = v => famGirl.localToWorld(v.set(0.42 * 0.75, 1.12 * 0.75, 0.1 * 0.75));
+    else {
+      const look = KIDS[(k - 1) % KIDS.length];
+      kid = rigPerson({ ...GIRL, ...look, flowers: look.flowers || null, legs: GIRL_LEGS, arms: KID_ARMS }, 0, 0.8);
+      kid.position.set(x, y, z); kid.rotation.y = Math.atan2(WIND.x, WIND.z); stage.add(kid);
+      handOf = v => kid.userData.arm.localToWorld(v.set(0.1, 0.21, 0.58));
+    }
+    const kite = makeKite(KITE_TYPES[k % 3], kiteColors[k], kiteColors[(k + 2) % 6], '#fbf6ea');
+    kite.position.set(x, y + 0.15, z).addScaledVector(WIND, 2); kite.rotation.set(-Math.PI / 2, 0, 0); stage.add(kite); // lying on the grass
+    const ribbons = kite.userData.tails.map(tl => { const r = makeRibbon(tl.color); r.mesh.visible = false; stage.add(r.mesh); return r; });
+    const NL = 24, lineGeo = new THREE.BufferGeometry().setFromPoints(Array.from({ length: NL + 1 }, () => new THREE.Vector3()));
+    const line = new THREE.Line(lineGeo, new THREE.LineBasicMaterial({ color: 0x4a4540, transparent: true, opacity: 0.6 }));
     line.frustumCulled = false; line.visible = false; stage.add(line);
-    const t = { pos: new THREE.Vector3(x, y + 3, z), done: false, radius: 28, lift: 0, ph: rand() * 6,
+    const hand = new THREE.Vector3(), target = new THREE.Vector3(), bridle = new THREE.Vector3(), tmpv = new THREE.Vector3();
+    const t = { pos: new THREE.Vector3(x, y + 3, z), done: false, radius: 28, lift: 0, ph: rand() * 6, hop: 0,
       beacon: beacon(kiteColors[k]),
-      onTouch() { line.visible = true; },
+      onTouch() { line.visible = true; ribbons.forEach(r => { r.mesh.visible = true; }); this.hop = 0.6; },
       update(dt) {
         if (!this.done) return;
-        this.lift = Math.min(1, this.lift + dt * 0.35);
-        const e = 1 - Math.pow(1 - this.lift, 3);
-        const tx = x + 14 + Math.sin(now * 0.7 + this.ph) * 3, ty = y + 2 + e * 38 + Math.sin(now * 1.1 + this.ph) * 1.5, tz = z - 6 + Math.cos(now * 0.5 + this.ph) * 2;
-        kite.position.set(lerp(x + 2, tx, e), lerp(y + 1.2, ty, e), lerp(z, tz, e));
-        kite.rotation.set(lerp(-1.3, 0, e), Math.sin(now * 0.4 + this.ph) * 0.4, Math.sin(now * 0.9 + this.ph) * 0.25);
-        tail.rotation.z = Math.sin(now * 3 + this.ph) * 0.3;
-        const p = line.geometry.attributes.position;
-        p.setXYZ(0, x, y + 3, z); p.setXYZ(1, kite.position.x, kite.position.y - 1, kite.position.z); p.needsUpdate = true;
+        // up it goes on the wind, quickly at first, then settling at the end of its line
+        this.lift = Math.min(1, this.lift + dt * 0.28);
+        const e = 1 - Math.pow(1 - this.lift, 3), len = 3 + e * 36, s = now * 0.55 + this.ph;
+        handOf(hand);
+        target.copy(hand).addScaledVector(WIND, len * 0.6).addScaledVector(up, len * 0.78)
+          .addScaledVector(side, Math.sin(s) * 3.5 * e).addScaledVector(up, (Math.sin(2 * s) * 1.1 + Math.sin(now * 1.7 + this.ph) * 0.35) * e); // a slow figure of eight
+        kite.position.lerp(target, Math.min(1, dt * 2.2));
+        // it faces back along its line, tilted into the wind, and banks as it swings across
+        kite.lookAt(hand); kite.rotateZ(-Math.cos(s) * 0.35 * e + Math.sin(now * 2.3 + this.ph) * 0.05);
+        // the line sags a little between the hand and the kite
+        kite.localToWorld(bridle.set(0, 0.2, 0));
+        const lp = line.geometry.attributes.position, sag = len * 0.05;
+        for (let i = 0; i <= NL; i++) { const u = i / NL; tmpv.lerpVectors(hand, bridle, u); tmpv.y -= sag * 4 * u * (1 - u); lp.setXYZ(i, tmpv.x, tmpv.y, tmpv.z); }
+        lp.needsUpdate = true;
+        // ribbon tails stream out behind it, down and away on the wind
+        const trail = tmpv.copy(WIND).multiplyScalar(0.55).add(_rd.set(0, -0.85, 0)).normalize();
+        const right = new THREE.Vector3(1, 0, 0).applyQuaternion(kite.quaternion);
+        kite.userData.tails.forEach((tl, i) => updateRibbon(ribbons[i], kite.localToWorld(tl.root.clone()), trail, right, tl.len * 1.5, this.ph + i));
+        // the child jumps once for joy, then watches it and gives the line little tugs
+        if (kid) {
+          this.hop = Math.max(0, this.hop - dt);
+          kid.position.y = y + Math.sin(Math.min(1, (0.6 - this.hop) / 0.6) * Math.PI) * (this.hop > 0 ? 0.35 : 0);
+          const hd = kid.userData.head, dx = kite.position.x - kid.position.x, dz = kite.position.z - kid.position.z;
+          hd.rotation.x = lerp(hd.rotation.x, clamp(-Math.atan2(kite.position.y - kid.position.y - 1.6, Math.hypot(dx, dz)), -0.9, 0.2), Math.min(1, dt * 2));
+          hd.rotation.y = lerp(hd.rotation.y, lookYaw(kid, kite.position), Math.min(1, dt * 2));
+          kid.userData.arm.rotation.x = Math.sin(now * 2.4 + this.ph) * 0.1 * e;
+        }
       } };
     t.beacon.position.set(x, y + 9, z);
     list.push(t);
@@ -962,7 +1059,8 @@ function setupSummer() {
 // 秋分: winnowing — the wind carries the chaff off the threshing floors
 const pileGeo = new THREE.CylinderGeometry(0, 2.3, 1.7, 10);
 const stackGeo = merge([part(CYL(1.2, 1.4, 2.0, 8), '#d4b065', [0, 1.0, 0]), part(CYL(0, 1.45, 1.3, 8), '#c9a258', [0, 2.65, 0])]);
-const floorGeo = merge([part(CYL(7, 7.4, 0.5, 18), '#cbb88d', [0, 0.05, 0])]);
+// a threshing floor: a raised, tamped-earth platform, its top flat at y = 0, its sides running down into the slope
+const floorGeo = merge([part(CYL(7, 7.6, 2.4, 22), '#cbb88d', [0, -1.2, 0]), part(CYL(7.04, 7.04, 0.08, 22), '#b9a679', [0, -0.04, 0])]);
 const shovelGeo = merge([part(BOX(0.09, 0.09, 2.8), '#7a5a3c', [0, 0, 1.0]), part(BOX(0.7, 0.06, 0.6), '#8a6a4a', [0, 0, 2.5])]);
 function chaffBurst(pos, dir) {
   const N = 140, geo = new THREE.BufferGeometry(), arr = new Float32Array(N * 3), vel = [];
@@ -995,21 +1093,27 @@ function setupAutumn() {
     const y = groundOK(x, z, 2.2); if (y === null || y > 45) continue;
     if (Math.abs(x - riverX(z)) < 24 || houseSpots.some(h => Math.hypot(h.x - x, h.z - z) < 16)) continue;
     if (!canPlant(x, z, 10) || spots.some(sp => Math.hypot(sp.x - x, sp.z - z) < 32)) continue;
-    spots.push({ x, y, z });
+    // the platform's top sits level with the highest ground under it, so it never floats; only fairly flat spots
+    const ring = [0, ...Array.from({ length: 10 }, (_, i) => i)].map((_, i) => i === 0 ? groundAt(x, z) : groundAt(x + Math.cos(i * 0.63) * 7, z + Math.sin(i * 0.63) * 7));
+    const hi = Math.max(...ring), lo = Math.min(...ring); if (hi - lo > 1.6) continue;
+    spots.push({ x, y: hi + 0.1, z, top: hi + 0.1 });
   }
   autumnSpot = spots[0] || null;
   spots.forEach((sp, k) => {
-    const g = new THREE.Group(); g.position.set(sp.x, sp.y - 0.15, sp.z); g.rotation.y = rand() * 6; stage.add(g);
+    const g = new THREE.Group(); g.position.set(sp.x, sp.top, sp.z); g.rotation.y = rand() * 6; stage.add(g);
     const floor = new THREE.Mesh(floorGeo, kitMat); floor.receiveShadow = true; g.add(floor);
     const pileMat = new THREE.MeshLambertMaterial({ color: 0xa8935f, flatShading: true });
-    const pile = new THREE.Mesh(pileGeo, pileMat); pile.position.set(1.5, 1.1, 0); pile.castShadow = true; g.add(pile);
-    const man = new THREE.Mesh(villager(['#6a5a48', '#4d6b8a', '#7a4a3a'][k % 3]), kitMat); man.position.set(-1.2, 0.3, 0.6); man.castShadow = true; g.add(man);
-    const shovel = new THREE.Group(); shovel.position.set(-0.6, 1.9, 0.6); g.add(shovel);
+    const pile = new THREE.Mesh(pileGeo, pileMat); pile.position.set(1.5, 0.84, 0); pile.castShadow = true; g.add(pile); // resting on the platform
+    const man = new THREE.Mesh(villager(['#6a5a48', '#4d6b8a', '#7a4a3a'][k % 3]), kitMat); man.position.set(-1.2, 0, 0.6); man.castShadow = true; g.add(man);
+    const shovel = new THREE.Group(); shovel.position.set(-0.6, 1.6, 0.6); g.add(shovel);
     shovel.add(new THREE.Mesh(shovelGeo, kitMat)); shovel.rotation.set(0.9, 1.2, 0);
+    // two haystacks just off the platform, each standing on the ground where it is
     for (let i = 0; i < 2; i++) {
-      const st = new THREE.Mesh(stackGeo, kitMat); st.position.set(-5 + i * 9.5, 0.2, -8 - i * 1.5); st.castShadow = true; g.add(st);
+      const lx = -5 + i * 9.5, lz = -8 - i * 1.5, c = Math.cos(g.rotation.y), s = Math.sin(g.rotation.y);
+      const wx = sp.x + lx * c + lz * s, wz = sp.z - lx * s + lz * c;
+      const st = new THREE.Mesh(stackGeo, kitMat); st.position.set(wx, groundAt(wx, wz) - 0.1, wz); st.castShadow = true; stage.add(st);
     }
-    const top = new THREE.Vector3(sp.x, sp.y + 2.4, sp.z);
+    const top = new THREE.Vector3(sp.x, sp.top + 2.1, sp.z);
     let tossT = 0;
     const t = { pos: top, done: false, radius: 24,
       beacon: beacon(0xffe2a0),
@@ -1136,14 +1240,17 @@ function headParts(sp) { // head, face and hair
 // in a straight line just at her brows. Smooth-shaded, with a soft sheen.
 const hairMat = new THREE.MeshPhongMaterial({ color: 0x241c19, shininess: 36, specular: 0x3a3634, side: THREE.DoubleSide });
 function hairMesh(sp) {
-  if (sp.hair !== 'bob') return null;
+  if (sp.hair !== 'bob' && sp.hair !== 'boy') return null;
   const hr = sp.headR, hy = sp.headY, hz = sp.headZ || 0;
   const profile = (bottom) => new THREE.SplineCurve(bottom.map(([r, y]) => new THREE.Vector2(r * hr, y * hr))).getPoints(48);
   // [radius, height] in head radii from the head's centre, top to bottom
-  const sides = profile([[0.001, 1.13], [0.38, 1.1], [0.72, 0.97], [0.96, 0.7], [1.08, 0.32], [1.1, -0.05], [1.08, -0.4], [1.02, -0.66], [0.93, -0.8], [0.84, -0.84]]);
-  const fringe = profile([[0.001, 1.13], [0.38, 1.1], [0.72, 0.97], [0.96, 0.7], [1.04, 0.48], [1.05, 0.34]]);
+  const boy = sp.hair === 'boy'; // a boy's short crop: the same clean dome, ending above the ears, a short fringe
+  const sides = profile(boy ? [[0.001, 1.12], [0.4, 1.09], [0.74, 0.95], [0.98, 0.64], [1.06, 0.26], [1.04, -0.02], [0.97, -0.2]]
+    : [[0.001, 1.13], [0.38, 1.1], [0.72, 0.97], [0.96, 0.7], [1.08, 0.32], [1.1, -0.05], [1.08, -0.4], [1.02, -0.66], [0.93, -0.8], [0.84, -0.84]]);
+  const fringe = profile(boy ? [[0.001, 1.12], [0.4, 1.09], [0.74, 0.95], [0.98, 0.66], [1.03, 0.52]]
+    : [[0.001, 1.13], [0.38, 1.1], [0.72, 0.97], [0.96, 0.7], [1.04, 0.48], [1.05, 0.34]]);
   const g = new THREE.Group();
-  const open = 0.98; // half the angle left open at the front for her face
+  const open = boy ? 1.15 : 0.98; // half the angle left open at the front for the face
   const back = new THREE.LatheGeometry(sides, 64, open, Math.PI * 2 - open * 2);
   const front = new THREE.LatheGeometry(fringe, 40, -open - 0.06, open * 2 + 0.12);
   for (const geo of [back, front]) {
@@ -1323,6 +1430,7 @@ function setFamily(mode) {
   }
   if (mode === 'autumn' && autumnSpot) { // helping at the first threshing floor
     const a = autumnSpot; gp = V3(a.x + 4.5, a.z + 3); girl = V3(a.x + 5.5, a.z - 1.5);
+    gp.y = girl.y = a.top; // standing on the threshing floor itself
     yaw = Math.atan2(a.x - gp.x, a.z - gp.z);
   }
   famStool.position.copy(stool); famStool.rotation.y = yaw;
