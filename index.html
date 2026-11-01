@@ -102,7 +102,7 @@ function fbm(x, y) {
   return s;
 }
 const riverX = z => 70 * Math.sin(z * 0.0055) + 25 * Math.sin(z * 0.017 + 1.3);
-function H(x, z) {
+function slopeH(x, z) {
   const d = Math.abs(x - riverX(z));
   const r = Math.hypot(x, z);
   const n = fbm(x * 0.0042 + 10, z * 0.0042 - 4);
@@ -112,6 +112,13 @@ function H(x, z) {
   h += smooth(420, 760, r) * 150;
   h -= (1 - smooth(6, 26, d)) * 9;
   return h;
+}
+// the ground under the old tree at the edge of the village is levelled into a small yard,
+// easing back into the hillside at its edge (the tree stands at riverX(138) + 28, z = 138)
+const YARD_X = riverX(160) + 28, YARD_Z = 138, YARD_H = slopeH(YARD_X, YARD_Z);
+function H(x, z) {
+  const h = slopeH(x, z), d = Math.hypot(x - YARD_X, z - YARD_Z);
+  return d > 30 ? h : lerp(YARD_H, h, smooth(15, 30, d));
 }
 const WATER = 2.5;
 
@@ -1226,6 +1233,23 @@ const OPENING = (() => { // the framing used at the very start and the very end
   const c = FAM.at(11.5, -4.5); c.y = Math.max(c.y, WATER) + 2.6;
   return { pos: c, look: FAM.stool.clone().lerp(FAM.girl, 0.5).add(new THREE.Vector3(0, 1.9, 0)) };
 })();
+// The prologue is one slow camera move: from high over the valley, down and round to settle low behind
+// the two of them, beside the old tree, looking where they look: out over the river and the far hills.
+// (f is toward the river, l along it, h above the ground.)
+const PROLOGUE = (() => {
+  const v = (f, l, h) => { const p = FAM.at(f, l); p.y = Math.max(p.y, WATER) + h; return p; };
+  return {
+    wide: { pos: v(40, -30, 16), look: v(4.6, 2.2, 3) },   // the valley, the river, the village, the tree, two small figures
+    mid: { pos: v(14, -14, 6), look: v(4.6, 2, 2.2) },      // coming down toward them
+    // from down the valley, low: the whole old tree stands in the frame with its crown spread above them,
+    // the two of them at its foot in the lower third, the valley running away behind them, the village to one side
+    end: { pos: v(5, -15, 1.8), look: v(3, 1.0, 4.4) },
+    drift: { pos: v(5.4, -14.3, 1.75), look: v(3.2, 1.3, 4.3) }, // and still coming in, very slowly, while they talk
+  };
+})();
+// the morning sun comes from across the valley, so the two of them are lit from in front of them,
+// edged with light as the camera looks out past them, their shadows falling back toward it
+SUN_DIR.set(FAM.F.x * 0.62, 0.62, 0.48).normalize();
 
 const CHAPTERS = [
   { key: 'spring', name: '立春', sub: '二月四日', intro: '立春。\n山里的雪，开始化了。', hint: '穿过山谷里的雾', setup: setupSpring, outro: '雾散了，山醒了。',
@@ -1300,18 +1324,25 @@ $('title').addEventListener('click', () => {
 function startPrologue() {
   state = 'prologue'; setFamily('spring');
   glowTarget = 0; glowFade = 0;
-  cine = { pos: OPENING.pos.clone(), look: OPENING.look.clone(), k: 0.9 };
+  // open wide on the valley, then come slowly down and round to them, never quite stopping
+  const P = PROLOGUE, go = (shot, k) => { if (state === 'prologue') cine = { pos: shot.pos.clone(), look: shot.look.clone(), k }; };
+  camPos.copy(P.wide.pos); camLook.copy(P.wide.look); go(P.wide, 4);
+  after(1.5, () => go(P.mid, 0.32));
+  after(6, () => go(P.end, 0.3));
+  after(12, () => go(P.drift, 0.08));
   after(6.5, () => { if (state === 'prologue') showLine('“爷爷，它怎么不转？”', 4); });
   after(11, () => { if (state === 'prologue') showLine('“等风来。\n风一来，春天就来了。”', 5.5); });
   after(17.5, () => {
     if (state !== 'prologue') return;
-    // the wind arrives from behind the camera, heading for them
-    const dir = OPENING.look.clone().sub(OPENING.pos).setY(0).normalize();
-    player.pos.copy(OPENING.pos).addScaledVector(dir, -14).add(_v.set(0, 2, 0));
-    player.yaw = Math.atan2(-dir.x, -dir.z) + 0.38; player.pitch = -0.02; player.yawRate = 0; player.speed = 0; // slightly off: you have to turn toward her
-    camPos.copy(player.pos).addScaledVector(dir, -9).add(_v.set(0, 2.5, 0));
+    // the wind arrives just in front of the camera and drifts into the picture; the camera holds this
+    // framing while you steer it to them, and only follows once you fly off somewhere else
+    const dir = P.drift.look.clone().sub(P.drift.pos).setY(0).normalize(), side = new THREE.Vector3(dir.z, 0, -dir.x);
+    player.pos.copy(P.drift.pos).addScaledVector(dir, 3).addScaledVector(side, -3.5).add(_v.set(0, 0.4, 0)); // a few metres out, off to one side
+    // heading about 43 degrees away from her, so left alone it passes some ten metres wide: you turn toward her yourself
+    const toHer = famGirl.position.clone().sub(player.pos);
+    player.yaw = Math.atan2(-toHer.x, -toHer.z) + 0.75; player.pitch = -0.02; player.yawRate = 0; player.speed = 0;
     trailPts.forEach(p => p.copy(player.pos));
-    glowTarget = 1; cine = null; state = 'meet';
+    glowTarget = 1; state = 'meet'; // cine stays on: the shot holds while the wind finds its way to them
     after(25, () => { if (state === 'meet') setHint('飞向那只风车'); });
   });
 }
@@ -1322,7 +1353,7 @@ function onPinwheel() {
     const to = FAM.at(7, 26);
     girlRun = { from: famGirl.position.clone(), to, t: 0 };
   });
-  after(4.5, () => { if (state === 'meet') startChapter(0); });
+  after(4.5, () => { if (state === 'meet') { cine = null; startChapter(0); } });
 }
 
 // ---------------------------------------------------------------- the last lantern
@@ -1574,6 +1605,7 @@ function step(dt) {
     } else famGirl.rotation.y = lerp(famGirl.rotation.y, girlYaw, Math.min(1, dt * 1.5));
   }
   if (state === 'meet' && !pinDone) { pin.wheel.getWorldPosition(_v); if (player.pos.distanceTo(_v) < 8) onPinwheel(); }
+  if (state === 'meet' && !pinDone && cine && !cine.follow && player.pos.distanceTo(camPos) > 26) cine = null; // wandered off: follow the wind
   if (pinDone) pin.target = player.pos.distanceTo(famGirl.position) < 22 ? 1 : 0.12;
   // the pinwheel on his stool turns whenever the wind passes, and keeps turning once she has let go
   if (stoolPin.g.visible) stoolPin.target = state === 'finale' || state === 'end' || player.pos.distanceTo(FAM.stool) < 15 ? 1 : 0;
@@ -1678,7 +1710,7 @@ function loop() {
 loop();
 
 // debug hook for testing
-window.__wind = { herWalk, peek: (from, at) => { cine = { pos: new THREE.Vector3(...from), look: new THREE.Vector3(...at), k: 40 }; }, unpeek: () => { cine = null; }, player, scene, get stage() { return stage; }, startChapter, lastLantern, famGirl, counts: () => ({ trees: trees.length, shrubs: shrubs.length, tufts: tufts.length }), get targets() { return targets; }, get state() { return state; }, get chapter() { return chapter; }, step };
+window.__wind = { get now() { return now; }, get cine() { return cine; }, get pinDone() { return pinDone; }, FAM, OPENING, herWalk, peek: (from, at) => { cine = { pos: new THREE.Vector3(...from), look: new THREE.Vector3(...at), k: 40 }; }, unpeek: () => { cine = null; }, player, scene, get stage() { return stage; }, startChapter, lastLantern, famGirl, counts: () => ({ trees: trees.length, shrubs: shrubs.length, tufts: tufts.length }), get targets() { return targets; }, get state() { return state; }, get chapter() { return chapter; }, step };
 </script>
 </body>
 </html>
