@@ -1452,8 +1452,124 @@ function animatePeople(dt) {
   g.torso.scale.y = 1 + Math.sin(now * 1.9) * 0.012;      // breathing
   p.torso.scale.y = 1 + Math.sin(now * 1.4 + 1) * 0.01;
 }
+// ---- summer: on the riverbank she chases a butterfly while he watches from his chair
+// her, built to run and reach: the head, each arm (from the shoulder) and each leg (from the hip) move
+function makeChaser() {
+  const sp = { ...GIRL, legs: [], arms: GIRL_ARMS_DOWN }, g = new THREE.Group();
+  g.add(figure(body({ ...sp, noHead: true, arms: [] })));
+  const neckTop = [0, sp.headY - sp.headR * 0.75, 0], head = new THREE.Group(); head.position.set(...neckTop); g.add(head);
+  head.add(figure(merge(headParts(sp)).translate(-neckTop[0], -neckTop[1], -neckTop[2])));
+  const hair = hairMesh(sp); if (hair) { hair.position.set(-neckTop[0], -neckTop[1], -neckTop[2]); head.add(hair); }
+  const arms = GIRL_ARMS_DOWN.map(A => { const a = new THREE.Group(); a.position.set(...A[0]); a.add(figure(merge(armParts(sp, A)).translate(-A[0][0], -A[0][1], -A[0][2]))); g.add(a); return a; });
+  const legGeo = merge(legParts(GIRL, [[0, 0, 0], [0.01, -0.35, 0.03], [0.01, -0.66, 0]]));
+  const legs = [0.15, -0.15].map(x => { const hip = new THREE.Group(); hip.position.set(x, 0.8, 0); hip.add(figure(legGeo)); g.add(hip); return hip; });
+  const root = new THREE.Group(); root.add(g); g.scale.setScalar(0.75);
+  root.userData = { head, arms, legs, body: g };
+  return root;
+}
+const chaser = makeChaser(); chaser.visible = false; scene.add(chaser);
+// a small yellow butterfly: two wings hinged on a slim body
+const butterfly = (() => {
+  const s = new THREE.Shape();
+  s.moveTo(0, 0); s.bezierCurveTo(0.04, 0.13, 0.17, 0.18, 0.21, 0.11); s.bezierCurveTo(0.23, 0.05, 0.14, 0.01, 0.09, -0.005);
+  s.bezierCurveTo(0.17, -0.05, 0.16, -0.15, 0.09, -0.15); s.bezierCurveTo(0.04, -0.14, 0.01, -0.07, 0, 0);
+  const wg = new THREE.ShapeGeometry(s, 10).rotateX(-Math.PI / 2);
+  const mat = new THREE.MeshLambertMaterial({ color: 0xf4cf4a, emissive: 0x3a2a00, side: THREE.DoubleSide });
+  const g = new THREE.Group(), wings = [1, -1].map(sx => {
+    const p = new THREE.Group(), m = new THREE.Mesh(wg, mat); m.scale.x = sx; p.add(m); g.add(p); return p; });
+  g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.16, 5).rotateX(Math.PI / 2), new THREE.MeshLambertMaterial({ color: 0x3a3026 })));
+  g.scale.setScalar(0.95); g.visible = false; scene.add(g);
+  return { g, wings, vel: new THREE.Vector3(), goal: new THREE.Vector3(), goalT: 0, flap: 0 };
+})();
+const SUMMER = { on: false, centre: new THREE.Vector3(), mode: 'follow', t: 0, run: 0, phase: 0, raise: 0, close: 0, hop: 0, pointT: 6, laughT: 0 };
+function summerArea(x, z) { // where she may run: near his chair, on the bank, never down to the water
+  const c = SUMMER.centre; let dx = x - c.x, dz = z - c.z; const d = Math.hypot(dx, dz), R = 6;
+  if (d > R) { x = c.x + dx / d * R; z = c.z + dz / d * R; }
+  const side = Math.sign(x - riverX(z)); if (Math.abs(x - riverX(z)) < 15) x = riverX(z) + side * 15;
+  const gp = famGrandpa.position, gd = Math.hypot(x - gp.x, z - gp.z);
+  if (gd < 1.5) { x = gp.x + (x - gp.x) / (gd || 1) * 1.5; z = gp.z + (z - gp.z) / (gd || 1) * 1.5; }
+  return [x, z];
+}
+function startSummerPlay() {
+  const gp = famGrandpa.position, away = Math.sign(gp.x - riverX(gp.z)) || 1;
+  SUMMER.centre.set(gp.x + away * 3, gp.y, gp.z + 3.5);
+  SUMMER.on = true; SUMMER.mode = 'follow'; SUMMER.t = 0; SUMMER.pointT = 6;
+  const [x, z] = summerArea(gp.x + away * 2, gp.z + 2.5);
+  chaser.position.set(x, groundAt(x, z), z); chaser.visible = true;
+  butterfly.g.position.set(x + 1.5, chaser.position.y + 1.6, z + 1); butterfly.g.visible = true; butterfly.goalT = 0;
+}
+function stopSummerPlay() { SUMMER.on = false; chaser.visible = butterfly.g.visible = false; }
+function summerPlay(dt) {
+  if (!SUMMER.on) return;
+  const S = SUMMER, b = butterfly, bp = b.g.position, cp = chaser.position, U = chaser.userData;
+  S.t += dt;
+  // the butterfly: drifts from one spot to the next, fluttering, now and then dipping low enough to be tempting
+  b.goalT -= dt;
+  if (b.goalT <= 0) {
+    const a = rand() * 6.28, r = 1 + rand() * 4.5;
+    const [gx, gz] = summerArea(S.centre.x + Math.cos(a) * r, S.centre.z + Math.sin(a) * r);
+    b.goal.set(gx, groundAt(gx, gz) + 0.7 + rand() * 1.4, gz); b.goalT = 1.6 + rand() * 2;
+  }
+  _v.copy(b.goal).sub(bp); const gl = _v.length();
+  _v.multiplyScalar(Math.min(1, gl) * 1.7 / (gl || 1));
+  b.vel.lerp(_v, Math.min(1, dt * 1.6));
+  b.vel.x += (Math.random() - 0.5) * dt * 7; b.vel.z += (Math.random() - 0.5) * dt * 7;
+  bp.addScaledVector(b.vel, dt); bp.y += Math.sin(now * 7.3) * dt * 0.5;
+  bp.y = Math.max(bp.y, groundAt(bp.x, bp.z) + 0.35);
+  b.g.rotation.y = turnTo(b.g.rotation.y, Math.atan2(b.vel.x, b.vel.z) + Math.PI, Math.min(1, dt * 6));
+  b.flap += dt * (S.mode === 'flee' ? 30 : 19);
+  const f = 0.25 + Math.sin(b.flap) * 0.95;
+  b.wings[0].rotation.z = f; b.wings[1].rotation.z = -f;
+
+  // her: run after it; when it's close and low, jump and clap her hands round it — it always gets away
+  const dx = bp.x - cp.x, dz = bp.z - cp.z, hd = Math.hypot(dx, dz), above = bp.y - cp.y;
+  let wantRun = 0, raise = 0, close = 0;
+  if (S.mode === 'follow') {
+    if (hd > 1.0) wantRun = Math.min(1, (hd - 1.0) * 0.8);
+    raise = hd < 2.6 ? 0.55 : 0;                            // hands up, ready, as she creeps close
+    if (hd < 1.25 && above < 1.9 && S.t > 1.5) { S.mode = 'pounce'; S.t = 0; S.escaped = false; }
+  } else if (S.mode === 'pounce') {
+    raise = 1; close = S.t > 0.25 ? 1 : 0;
+    S.hop = Math.sin(Math.min(1, S.t / 0.55) * Math.PI) * 0.22;
+    if (S.t > 0.22 && !S.escaped) { // it slips out between her hands and up
+      S.escaped = true;
+      const ax = bp.x - cp.x, az = bp.z - cp.z, al = Math.hypot(ax, az) || 1;
+      const [gx, gz] = summerArea(bp.x + ax / al * 3, bp.z + az / al * 3);
+      b.goal.set(gx, groundAt(gx, gz) + 2.6 + rand() * 0.6, gz); b.goalT = 2.2;
+      b.vel.y += 1.5; S.laughT = 1.6;
+    }
+    if (S.t > 0.9) { S.mode = 'watch'; S.t = 0; S.hop = 0; }
+  } else if (S.mode === 'watch') { // a moment looking up after it, hands still half raised
+    raise = 0.35; if (S.t > 1.4) { S.mode = 'follow'; S.t = 0; }
+  }
+  S.run = lerp(S.run, wantRun, Math.min(1, dt * 4));
+  S.raise = lerp(S.raise, raise, Math.min(1, dt * 7)); S.close = lerp(S.close, close, Math.min(1, dt * 10));
+  if (hd > 0.05) chaser.rotation.y = turnTo(chaser.rotation.y, Math.atan2(dx, dz), Math.min(1, dt * 5));
+  if (S.run > 0.02) {
+    const sp = S.run * 1.9 * dt, fx = Math.sin(chaser.rotation.y), fz = Math.cos(chaser.rotation.y);
+    const [nx, nz] = summerArea(cp.x + fx * sp, cp.z + fz * sp); cp.x = nx; cp.z = nz;
+  }
+  S.phase += dt * 11 * S.run;
+  cp.y = groundAt(cp.x, cp.z) + Math.abs(Math.sin(S.phase)) * 0.07 * S.run + S.hop;
+  U.legs[0].rotation.x = Math.sin(S.phase) * 0.7 * S.run; U.legs[1].rotation.x = -Math.sin(S.phase) * 0.7 * S.run;
+  U.body.rotation.x = 0.12 * S.run;                         // leaning into the run
+  for (let i = 0; i < 2; i++) {
+    const sx = i === 0 ? 1 : -1, swing = (i === 0 ? -1 : 1) * Math.sin(S.phase) * 0.6 * S.run * (1 - S.raise);
+    U.arms[i].rotation.set(-(S.raise * 2.3 + S.close * 0.5) + swing, 0, -sx * (0.1 * S.raise + 0.2 * S.close)); // hands meet up above her head, not in front of her face
+  }
+  // her eyes stay on it
+  const lp = Math.atan2(above - 1.6, Math.max(0.3, hd));
+  U.head.rotation.set(clamp(-lp, -0.7, 0.3), 0, 0.1);
+
+  // him: his head follows her about; he laughs when it gets away, and now and then points it out to her
+  setPose({ pYaw: lookYaw(famGrandpa, cp), pPitch: 0.08 });
+  S.laughT -= dt; S.pointT -= dt;
+  if (S.laughT > 0) setPose({ pNod: 1 }); else setPose({ pNod: 0 });
+  if (S.pointT < 0 && S.pointT > -1.8) setPose({ pArm: -1.25, pYaw: lookYaw(famGrandpa, bp) });
+  else if (S.pointT <= -1.8) { setPose({ pArm: 0 }); S.pointT = 8 + rand() * 5; }
+}
 function setFamily(mode) {
-  const M = { spring: ['sit', 'stand', true], qingming: ['sit', 'stand', false], summer: ['sit', 'sit', false], autumn: ['stand', 'stand', false],
+  const M = { spring: ['sit', 'stand', true], qingming: ['sit', 'stand', false], summer: ['sit', null, false], autumn: ['stand', 'stand', false],
     winter: [null, null, false] }[mode]; // in winter nobody is under the tree; she comes out later
   const V3 = (x, z, dy = 0) => new THREE.Vector3(x, groundAt(x, z) + dy, z);
   let stool = FAM.stool, gp = M[0] === 'stand' ? FAM.gpStand : FAM.stool, girl = M[1] === 'sit' ? FAM.girlSit : FAM.girl, yaw = FAM.yaw;
@@ -1476,6 +1592,7 @@ function setFamily(mode) {
   stoolSnow.visible = stoolPin.g.visible = stoolCane.visible = mode === 'winter';
   famGirl.scale.setScalar(1); gpLook = false;
   girlRun = null;
+  if (mode === 'summer') startSummerPlay(); else { stopSummerPlay(); setPose({ pArm: 0, pNod: 0 }); }
 }
 setFamily('spring');
 const OPENING = (() => { // the framing used at the very start and the very end
@@ -1881,6 +1998,7 @@ function step(dt) {
 
   // the family: she looks around when the wind passes, but never at it
   animatePeople(dt);
+  summerPlay(dt);
   if (famGirl.visible) {
     girlReactCD -= dt;
     if (state !== 'prologue' && glowFade > 0.5 && girlReactCD <= 0 && player.pos.distanceTo(famGirl.position) < 14) { girlReact = 2.6; girlReactCD = 7; }
@@ -1998,7 +2116,7 @@ function loop() {
 loop();
 
 // debug hook for testing
-window.__wind = { get now() { return now; }, get cine() { return cine; }, get pinDone() { return pinDone; }, FAM, OPENING, herWalk, peek: (from, at) => { cine = { pos: new THREE.Vector3(...from), look: new THREE.Vector3(...at), k: 40 }; }, unpeek: () => { cine = null; }, player, scene, get stage() { return stage; }, startChapter, lastLantern, famGirl, counts: () => ({ trees: trees.length, shrubs: shrubs.length, tufts: tufts.length }), get targets() { return targets; }, get state() { return state; }, get chapter() { return chapter; }, step, groundAt, terrain };
+window.__wind = { get now() { return now; }, get cine() { return cine; }, get pinDone() { return pinDone; }, FAM, OPENING, herWalk, peek: (from, at) => { cine = { pos: new THREE.Vector3(...from), look: new THREE.Vector3(...at), k: 40 }; }, unpeek: () => { cine = null; }, player, scene, get stage() { return stage; }, startChapter, lastLantern, famGirl, counts: () => ({ trees: trees.length, shrubs: shrubs.length, tufts: tufts.length }), get targets() { return targets; }, get state() { return state; }, get chapter() { return chapter; }, step, groundAt, terrain, chaser, butterfly, SUMMER };
 </script>
 </body>
 </html>
