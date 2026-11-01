@@ -1079,8 +1079,13 @@ function body(sp) {
   for (let i = 0; i < 3; i++) { const f = 0.18 + i * 0.22; P.push(ball([0.12, t.y1 - (t.y1 - t.y0) * f, rAt(f) + 0.02 + (t.z || 0)], 0.035, sp.trim)); }
   P.push(part(CYL(sp.neck * 1.7, sp.neck * 2.2, 0.12, 10), sp.coat, [0, t.y1 + 0.03, hz * 0.4])); // standing collar
   P.push(limb([0, t.y1, hz * 0.3], [0, sp.headY - sp.headR * 0.75, hz], sp.neck * 1.1, sp.neck, SKIN));
-  // head and face
-  const hy = sp.headY, hr = sp.headR;
+  if (!sp.noHead) P.push(...headParts(sp));
+  for (const A of sp.arms || []) P.push(...armParts(sp, A));
+  (sp.extra || []).forEach(e => P.push(e));
+  return merge(P);
+}
+function headParts(sp) { // head, face and hair
+  const P = [], hy = sp.headY, hr = sp.headR, hz = sp.headZ || 0;
   P.push(ball([0, hy, hz], hr, SKIN, [0.94, 1.04, 0.98]));
   for (const sx of [-1, 1]) {
     P.push(part(BOX(hr * 0.13, hr * 0.14, 0.02), '#2a2422', [sx * hr * 0.33, hy + hr * 0.06, hz + hr * 0.92]));            // eyes
@@ -1097,13 +1102,24 @@ function body(sp) {
     P.push(part(BOX(hr * 1.3, hr * 0.24, hr * 0.3), HAIR, [0, hy + hr * 0.6, hz + hr * 0.66]));
     for (const sx of [-1, 1]) { P.push(ball([sx * hr * 0.8, hy + hr * 0.62, hz - hr * 0.1], hr * 0.34, HAIR), ball([sx * hr * 0.6, hy + hr * 0.42, hz - hr * 0.05], hr * 0.1, '#c33a33')); }
   }
-  for (const A of sp.arms || []) { // sleeves, cuffs and hands
-    P.push(ball(A[0], sp.arm * 1.25, sp.coat), limb(A[0], A[1], sp.arm * 1.15, sp.arm, sp.coat), ball(A[1], sp.arm, sp.coat),
-      limb(A[1], A[2], sp.arm, sp.arm * 0.95, sp.coat));
-    P.push(ball(A[2], sp.hand, SKIN, [0.9, 1.1, 0.9]));
-  }
-  (sp.extra || []).forEach(e => P.push(e));
-  return merge(P);
+  return P;
+}
+function armParts(sp, A) { // a sleeve from shoulder to elbow to wrist, and the hand
+  return [ball(A[0], sp.arm * 1.25, sp.coat), limb(A[0], A[1], sp.arm * 1.15, sp.arm, sp.coat), ball(A[1], sp.arm, sp.coat),
+    limb(A[1], A[2], sp.arm, sp.arm * 0.95, sp.coat), ball(A[2], sp.hand, SKIN, [0.9, 1.1, 0.9])];
+}
+// A person who can move a little: the head turns and nods on a pivot at the top of the neck, one arm swings
+// from the shoulder, and the body breathes. Everything else stays as one piece.
+function rigPerson(sp, movingArm, scale = 1) {
+  const g = new THREE.Group(), hz = sp.headZ || 0;
+  const torso = figure(body({ ...sp, noHead: true, arms: sp.arms.filter((_, i) => i !== movingArm) })); g.add(torso);
+  const neckTop = [0, sp.headY - sp.headR * 0.75, hz];
+  const head = new THREE.Group(); head.position.set(...neckTop); g.add(head);
+  head.add(figure(merge(headParts(sp)).translate(-neckTop[0], -neckTop[1], -neckTop[2])));
+  const A = sp.arms[movingArm], arm = new THREE.Group(); arm.position.set(...A[0]); g.add(arm);
+  arm.add(figure(merge(armParts(sp, A)).translate(-A[0][0], -A[0][1], -A[0][2])));
+  g.scale.setScalar(scale); g.userData = { torso, head, arm };
+  return g;
 }
 const OLD_MAN = { coat: '#5d6470', trim: '#3a3f48', trousers: '#3b3a44', shoe: '#2a2420', foot: [0.22, 0.14, 0.42], thigh: 0.15,
   neck: 0.1, headR: 0.3, brow: WHITE, hair: 'white', arm: 0.1, hand: 0.1 };
@@ -1112,16 +1128,16 @@ const geoGrandpaStand = body({ ...OLD_MAN, torso: { y0: 1.02, y1: 2.2, r0: 0.5, 
   arms: [[[0.44, 2.08, 0], [0.56, 1.68, 0.16], [0.6, 1.4, 0.38]], [[-0.44, 2.08, 0], [-0.52, 1.62, 0.04], [-0.5, 1.2, 0.1]]],
   extra: [limb([0.63, 0.0, 0.48], [0.6, 1.42, 0.38], 0.035, 0.032, '#7a5a3c'), limb([0.6, 1.42, 0.38], [0.48, 1.5, 0.38], 0.035, 0.035, '#7a5a3c')] });
 // seated, the hem is drawn in and he sits a little forward, so his jacket stays clear of the chair back
-const geoGrandpaSit = body({ ...OLD_MAN, torso: { y0: 0.66, y1: 1.8, r0: 0.43, r1: 0.37, lean: 0.08, z: 0.12 }, headY: 2.16, headZ: 0.1,
+const GRANDPA_SIT = { ...OLD_MAN, torso: { y0: 0.66, y1: 1.8, r0: 0.43, r1: 0.37, lean: 0.08, z: 0.12 }, headY: 2.16, headZ: 0.1,
   legs: [[[0.17, 0.74, 0.05], [0.19, 0.76, 0.58], [0.19, 0.16, 0.64]], [[-0.17, 0.74, 0.05], [-0.19, 0.76, 0.58], [-0.19, 0.16, 0.64]]],
-  arms: [[[0.44, 1.68, 0.08], [0.5, 1.24, 0.28], [0.3, 0.92, 0.52]], [[-0.44, 1.68, 0.08], [-0.5, 1.24, 0.28], [-0.3, 0.92, 0.52]]] });
+  arms: [[[0.44, 1.68, 0.08], [0.5, 1.24, 0.28], [0.3, 0.92, 0.52]], [[-0.44, 1.68, 0.08], [-0.5, 1.24, 0.28], [-0.3, 0.92, 0.52]]] };
 // the girl: a child's proportions, red padded jacket
 const GIRL = { coat: '#c0504a', trim: '#8c2f2b', trousers: '#3b3a44', shoe: '#3a2a24', foot: [0.18, 0.12, 0.32], thigh: 0.13,
   neck: 0.09, headR: 0.4, headY: 2.22, brow: HAIR, hair: 'dark', arm: 0.09, hand: 0.09, torso: { y0: 0.72, y1: 1.82, r0: 0.48, r1: 0.32 } };
 const GIRL_LEGS = [[[0.15, 0.8, 0], [0.16, 0.45, 0.03], [0.16, 0.14, 0]], [[-0.15, 0.8, 0], [-0.16, 0.45, 0.02], [-0.16, 0.14, 0]]];
 const GIRL_ARMS_DOWN = [[[0.34, 1.74, 0], [0.42, 1.42, 0.04], [0.42, 1.12, 0.1]], [[-0.34, 1.74, 0], [-0.42, 1.42, 0.04], [-0.42, 1.12, 0.1]]];
 const geoGirlStand = body({ ...GIRL, legs: GIRL_LEGS, arms: GIRL_ARMS_DOWN });
-const geoGirlRaise = body({ ...GIRL, legs: GIRL_LEGS, arms: [[[0.34, 1.74, 0], [0.54, 1.6, 0.18], [0.5, 1.92, 0.3]], GIRL_ARMS_DOWN[1]] }); // holding up the pinwheel
+const GIRL_RAISE = { ...GIRL, legs: GIRL_LEGS, arms: [[[0.34, 1.74, 0], [0.54, 1.6, 0.18], [0.5, 1.92, 0.3]], GIRL_ARMS_DOWN[1]] }; // holding up the pinwheel
 const geoGirlSit = body({ ...GIRL, torso: { y0: 0.15, y1: 1.22, r0: 0.48, r1: 0.32 }, headY: 1.62,
   legs: [[[0.15, 0.24, 0.02], [0.17, 0.56, 0.42], [0.17, 0.14, 0.72]], [[-0.15, 0.24, 0.02], [-0.17, 0.56, 0.42], [-0.17, 0.14, 0.72]]],
   arms: [[[0.34, 1.14, 0], [0.38, 0.86, 0.3], [0.2, 0.64, 0.5]], [[-0.34, 1.14, 0], [-0.38, 0.86, 0.3], [-0.2, 0.64, 0.5]]] });
@@ -1193,12 +1209,14 @@ const famStool = figure((() => {
     part(BOX(0.7, 0.05, 0.045), '#6a4c32', [0, 0.8, onPost(0.8)], [lean, 0, 0]));                       // low rail
   return merge(parts);
 })());
-const famGrandpa = new THREE.Group(), gpSit = figure(geoGrandpaSit), gpStand = figure(geoGrandpaStand);
+const famGrandpa = new THREE.Group(), gpSit = rigPerson(GRANDPA_SIT, 0), gpStand = figure(geoGrandpaStand); // seated, his head and right arm can move
 famGrandpa.add(gpSit, gpStand);
-const famGirl = new THREE.Group(), girlStand = figure(geoGirlStand, 0.75), girlSit = figure(geoGirlSit, 0.75), girlRaise = figure(geoGirlRaise, 0.75);
+const famGirl = new THREE.Group(), girlStand = figure(geoGirlStand, 0.75), girlSit = figure(geoGirlSit, 0.75);
+const girlRaise = rigPerson(GIRL_RAISE, 0, 0.75); // with the pinwheel: her head and the arm holding it can move
 famGirl.add(girlStand, girlSit, girlRaise);
 // the pinwheel's stick runs up through her raised hand
-const pin = makePinwheel(); pin.g.position.set(0.5, 1.0, 0.3); girlRaise.add(pin.g); pin.g.scale.setScalar(1.3 / 0.75);
+// the pinwheel's stick runs up through her raised hand, so it moves with her arm (the arm pivots at her shoulder)
+const pin = makePinwheel(); pin.g.position.set(0.5 - 0.34, 1.0 - 1.74, 0.3); girlRaise.userData.arm.add(pin.g); pin.g.scale.setScalar(1.3 / 0.75);
 [famStool, famGrandpa, famGirl].forEach(o => { o.rotation.y = FAM.yaw; scene.add(o); });
 famStool.position.copy(FAM.stool);
 const stoolSnow = figure(merge([ // a soft cap of snow on the seat, a little on the stretchers
@@ -1218,6 +1236,26 @@ const stoolCane = figure(merge([
 stoolCane.visible = false; famStool.add(stoolCane);
 let gpLook = false;
 let girlYaw = FAM.yaw, girlReact = 0, girlReactCD = 0, girlRun = null;
+// ---- the little performance under the tree: each pose eases toward its target every frame, never jumps
+// (g = the girl: head yaw/pitch, the arm holding the pinwheel, a shake of it; p = the old man: head, nod, right arm)
+const pose = { gYaw: 0, gPitch: -0.3, gArm: 0, gWave: 0, pYaw: 0, pPitch: 0.05, pArm: 0, pNod: 0 };
+const poseT = { ...pose };
+const setPose = o => Object.assign(poseT, o);
+function lookYaw(group, target) { // the head turn that points a person's face at something, relative to the way they face
+  const want = Math.atan2(target.x - group.position.x, target.z - group.position.z);
+  return clamp(Math.atan2(Math.sin(want - group.rotation.y), Math.cos(want - group.rotation.y)), -1.1, 1.1);
+}
+function animatePeople(dt) {
+  const k = Math.min(1, dt * 2.6);
+  for (const key in pose) pose[key] = lerp(pose[key], poseT[key], k);
+  const g = girlRaise.userData, p = gpSit.userData;
+  g.head.rotation.set(pose.gPitch, pose.gYaw, 0);
+  g.arm.rotation.set(pose.gArm, 0, pose.gWave * Math.sin(now * 7) * 0.16);
+  p.head.rotation.set(pose.pPitch + pose.pNod * Math.sin(now * 5.5) * 0.12, pose.pYaw, 0);
+  p.arm.rotation.set(pose.pArm, 0, 0);
+  g.torso.scale.y = 1 + Math.sin(now * 1.9) * 0.012;      // breathing
+  p.torso.scale.y = 1 + Math.sin(now * 1.4 + 1) * 0.01;
+}
 function setFamily(mode) {
   const M = { spring: ['sit', 'stand', true], qingming: ['sit', 'stand', false], summer: ['sit', 'sit', false], autumn: ['stand', 'stand', false],
     winter: [null, null, false] }[mode]; // in winter nobody is under the tree; she comes out later
@@ -1337,6 +1375,19 @@ $('title').addEventListener('click', () => {
 // ---------------------------------------------------------------- prologue: a pinwheel that will not turn
 function startPrologue() {
   state = 'prologue'; setFamily('spring');
+  // she looks up at the pinwheel; he looks out over the valley
+  setPose({ gYaw: 0, gPitch: -0.3, gArm: 0, gWave: 0, pYaw: 0.15, pPitch: 0.05, pArm: 0, pNod: 0 }); Object.assign(pose, poseT);
+  const act = (t, o) => after(t, () => { if (state === 'prologue') setPose(o); });
+  act(2.5, { gWave: 1, gArm: -0.15 });                                    // she shakes it, holds it up higher
+  act(3.6, { pNod: 1 }); act(4.6, { pNod: 0 });                           // he nods to himself
+  act(5.4, { gWave: 0, gArm: 0.35, gPitch: -0.12 });                      // it won't turn; her arm sinks a little
+  after(6.3, () => { if (state === 'prologue') setPose({ gYaw: lookYaw(famGirl, famGrandpa.position), gPitch: 0.05 }); }); // she turns to him to ask
+  after(10.3, () => { if (state === 'prologue') setPose({ pYaw: lookYaw(famGrandpa, famGirl.position) }); });             // he turns to her
+  act(11.1, { pNod: 1 }); act(12.0, { pNod: 0 });                         // and nods
+  act(12.6, { pArm: -1.45, pYaw: 0, pPitch: -0.08 });                     // "风一来": he points out over the valley
+  act(13.4, { gYaw: 0.1, gPitch: -0.05 });                                // she looks where he points
+  act(14.8, { gArm: -0.2, gPitch: -0.35 });                               // and holds the pinwheel up high again, waiting
+  act(15.8, { pArm: 0, pPitch: 0.02 });                                   // he lowers his hand
   glowTarget = 0; glowFade = 0;
   // open wide on the valley, then come slowly down and round to them, never quite stopping
   const P = PROLOGUE, go = (shot, k) => { if (state === 'prologue') cine = { pos: shot.pos.clone(), look: shot.look.clone(), k }; };
@@ -1385,6 +1436,7 @@ function startPrologue() {
 }
 function onPinwheel() {
   pinDone = true; sound.chime(0);
+  setPose({ pPitch: -0.35, pYaw: 0, pArm: 0, gWave: 0 }); // he lifts his face, as if he felt it come
   girlReact = 3; girlReactCD = 8;
   after(3.2, () => { // she runs off toward the valley with it
     const to = FAM.at(7, 26);
@@ -1631,6 +1683,7 @@ function step(dt) {
   sun.position.copy(focus).addScaledVector(SUN_DIR, 400); sun.target.position.copy(focus);
 
   // the family: she looks around when the wind passes, but never at it
+  animatePeople(dt);
   if (famGirl.visible) {
     girlReactCD -= dt;
     if (state !== 'prologue' && glowFade > 0.5 && girlReactCD <= 0 && player.pos.distanceTo(famGirl.position) < 14) { girlReact = 2.6; girlReactCD = 7; }
