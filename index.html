@@ -792,13 +792,14 @@ function makeLantern(x, y, z) {
   scene.add(g); return g;
 }
 function riseLantern(g, speed = 3.2) {
+  scene.attach(g);
   const ph = rand() * 6, x0 = g.position.x, z0 = g.position.z;
   extras.push(dt => {
     if (!g.visible) return;
     g.position.y += speed * dt;
     g.position.x = x0 + Math.sin(now * 0.3 + ph) * 4 + (g.position.y - 10) * 0.08;
     g.position.z = z0 + Math.cos(now * 0.25 + ph) * 4;
-    if (g.position.y > 700) g.visible = false;
+    if (g.position.y > 1100) g.visible = false;
   });
 }
 function setupWinter() {
@@ -807,7 +808,6 @@ function setupWinter() {
     const a = k / 8 * Math.PI * 2 + 0.3, r = 30 + (k % 3) * 16;
     let x = VX + Math.cos(a) * r, z = VZ + Math.sin(a) * r;
     if (Math.abs(x - riverX(z)) < 20) x += 30;
-    if (k === 0) { x = FAM.lantern.x; z = FAM.lantern.z; }
     const y = Math.max(H(x, z), WATER) + 1.2;
     const g = makeLantern(x, y, z);
     const t = { pos: g.position, done: false, radius: 22,
@@ -918,6 +918,7 @@ function chaffBurst(pos, dir) {
     if (life > 6) { pts.visible = false; scene.remove(pts); geo.dispose(); }
   });
 }
+let autumnSpot = null;
 function setupAutumn() {
   const list = [], spots = [];
   for (let tries = 0; spots.length < 6 && tries < 3000; tries++) {
@@ -927,6 +928,7 @@ function setupAutumn() {
     if (!canPlant(x, z, 10) || spots.some(sp => Math.hypot(sp.x - x, sp.z - z) < 32)) continue;
     spots.push({ x, y, z });
   }
+  autumnSpot = spots[0] || null;
   spots.forEach((sp, k) => {
     const g = new THREE.Group(); g.position.set(sp.x, sp.y - 0.15, sp.z); g.rotation.y = rand() * 6; stage.add(g);
     const floor = new THREE.Mesh(floorGeo, kitMat); floor.receiveShadow = true; g.add(floor);
@@ -964,7 +966,7 @@ const FAM = (() => {
   const F = new THREE.Vector3(Math.sign(riverX(OLD.z) - OLD.x) || -1, 0, 0);
   const at = (f, l) => { const x = OLD.x + F.x * f, z = OLD.z + l; return new THREE.Vector3(x, H(x, z), z); };
   return { F, at, yaw: Math.atan2(F.x, F.z), stool: at(4, 1), girl: at(5.8, 3.4), girlSit: at(5.2, 2.6), gpStand: at(4.6, -0.9),
-    grown: at(5.4, 3.0), child: at(6.6, 4.4), lantern: at(8.6, 1.8) };
+    lantern: at(8.6, 1.8) };
 })();
 const HAIR = '#2b2725', WHITE = '#e6e3dc', SKIN = '#ecd0b4';
 const xf = (g, [x, y, z], [rx = 0, ry = 0, rz = 0] = [], sc = 1) => { g.scale(sc, sc, sc); g.rotateZ(rz); g.rotateX(rx); g.rotateY(ry); g.translate(x, y, z); return g; };
@@ -1000,15 +1002,6 @@ function geoGirl(coat, sit) {
     part(ICO(0.17), HAIR, [-0.33, 2.55 + y, -0.05]), part(ICO(0.17), HAIR, [0.33, 2.55 + y, -0.05]));
   return merge(parts);
 }
-const geoGrown = merge([
-  part(CYL(0.15, 0.17, 0.95, 5), '#3b3a44', [-0.2, 0.48, 0]), part(CYL(0.15, 0.17, 0.95, 5), '#3b3a44', [0.2, 0.48, 0]),
-  part(CYL(0.38, 0.6, 1.45, 7), '#9d4a42', [0, 1.65, 0]),
-  part(CYL(0.1, 0.11, 0.9, 5), '#9d4a42', [0.48, 1.62, 0.1], [0.25, 0, 0.22]),
-  part(CYL(0.1, 0.11, 0.9, 5), '#9d4a42', [-0.48, 1.62, 0], [0, 0, -0.2]),
-  part(new THREE.IcosahedronGeometry(0.38, 1), SKIN, [0, 2.65, 0]),
-  part(new THREE.IcosahedronGeometry(0.4, 1), HAIR, [0, 2.76, -0.07], [0, 0, 0], [1, 0.8, 1]),
-  part(new THREE.IcosahedronGeometry(0.22, 0), HAIR, [0, 2.8, -0.38]),
-]);
 const pinMat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, flatShading: true });
 function makePinwheel() {
   const g = new THREE.Group();
@@ -1029,22 +1022,34 @@ famGrandpa.add(gpSit, gpStand);
 const famGirl = new THREE.Group(), girlStand = figure(geoGirl('#c0504a', false), 0.75), girlSit = figure(geoGirl('#c0504a', true), 0.75);
 famGirl.add(girlStand, girlSit);
 const pin = makePinwheel(); pin.g.position.set(0.5, 1.0, 0.3); pin.g.scale.setScalar(1.3); girlStand.add(pin.g); pin.g.scale.setScalar(1.3 / 0.75);
-const famGrown = figure(geoGrown);
-const famChild = new THREE.Group(), childM = figure(geoGirl('#e0a33a', false), 0.55); famChild.add(childM);
-const pin2 = makePinwheel(); pin2.g.position.set(0.5, 1.0, 0.3); childM.add(pin2.g); pin2.g.scale.setScalar(1.4 / 0.55);
-[famStool, famGrandpa, famGirl, famGrown, famChild].forEach(o => { o.rotation.y = FAM.yaw; scene.add(o); });
+[famStool, famGrandpa, famGirl].forEach(o => { o.rotation.y = FAM.yaw; scene.add(o); });
 famStool.position.copy(FAM.stool);
+const stoolSnow = figure(merge([part(BOX(1.15, 0.22, 0.95), '#eef2f8', [0, 0.68, 0], [0, 0, 0.02])])); stoolSnow.visible = false; famStool.add(stoolSnow);
 let girlYaw = FAM.yaw, girlReact = 0, girlReactCD = 0, girlRun = null;
 function setFamily(mode) {
   const M = { spring: ['sit', 'stand', true], qingming: ['sit', 'stand', false], summer: ['sit', 'sit', false], autumn: ['stand', 'stand', false],
-    winter: ['stand', 'stand', false], deep: [null, 'stand', false], end: [null, null, false] }[mode];
+    winter: [null, 'stand', false] }[mode];
+  const V3 = (x, z, dy = 0) => new THREE.Vector3(x, Math.max(H(x, z), WATER) + dy, z);
+  let stool = FAM.stool, gp = M[0] === 'stand' ? FAM.gpStand : FAM.stool, girl = M[1] === 'sit' ? FAM.girlSit : FAM.girl, yaw = FAM.yaw;
+  if (mode === 'summer') { // on the bank above the bridge, watching the boats go by
+    const z = VZ - 30, x = riverX(z) + 19;
+    yaw = Math.atan2(riverX(z) - x, 0); stool = gp = V3(x, z); girl = V3(x + 0.3, z + 2.2);
+  }
+  if (mode === 'autumn' && autumnSpot) { // helping at the first threshing floor
+    const a = autumnSpot; gp = V3(a.x + 4.5, a.z + 3); girl = V3(a.x + 5.5, a.z - 1.5);
+    yaw = Math.atan2(a.x - gp.x, a.z - gp.z);
+  }
+  famStool.position.copy(stool); famStool.rotation.y = yaw;
   famGrandpa.visible = !!M[0]; gpSit.visible = M[0] === 'sit'; gpStand.visible = M[0] === 'stand';
-  famGrandpa.position.copy(M[0] === 'stand' ? FAM.gpStand : FAM.stool);
+  famGrandpa.position.copy(gp); famGrandpa.rotation.y = yaw;
   famGirl.visible = !!M[1]; girlStand.visible = M[1] === 'stand'; girlSit.visible = M[1] === 'sit';
-  famGirl.position.copy(M[1] === 'sit' ? FAM.girlSit : FAM.girl); famGirl.rotation.y = girlYaw = FAM.yaw;
+  famGirl.position.copy(girl); famGirl.rotation.y = girlYaw = yaw;
   pin.g.visible = M[2];
-  famGrown.visible = famChild.visible = mode === 'end';
-  famGrown.position.copy(FAM.grown); famChild.position.copy(FAM.child);
+  stoolSnow.visible = mode === 'winter';
+  if (mode === 'winter' && !herLantern) { // she holds one lantern of her own
+    herLantern = makeLantern(0, 0, 0); famGirl.add(herLantern);
+    herLantern.position.set(0, 1.45, 0.6); herLantern.scale.setScalar(0.6);
+  }
   girlRun = null;
 }
 setFamily('spring');
@@ -1064,14 +1069,14 @@ const CHAPTERS = [
   { key: 'autumn', name: '秋分', sub: '九月廿三', intro: '秋分。\n稻子收了，晒谷场上的人在等一阵好风。', hint: '从扬谷的人身边吹过', setup: setupAutumn, family: 'autumn',
     particles: { fall: 1.6, drift: 3, size: 1.0, color: C('#d98b3a'), opacity: 0.85 }, scale: [59, 62, 64, 66, 69],
     outro: '谷子进了仓。\n第一场雪，落在夜里。' },
-  { key: 'winter', name: '冬至', sub: '十二月廿一', intro: '冬至夜。\n村里的人，要把灯放给远方的人看。', hint: '飞近地上的灯，把它们送上夜空', setup: setupWinter, family: 'winter',
+  { key: 'winter', name: '冬至', sub: '十二月廿一', intro: '冬至夜。', hint: '飞近地上的灯，把它们送上夜空', setup: setupWinter, family: 'winter',
     particles: { fall: 5, drift: 1.5, size: 0.9, color: C('#ffffff'), opacity: 0.9 }, scale: [57, 60, 62, 64, 67] },
 ];
 
 // ---------------------------------------------------------------- flow
 let state = 'title', chapter = -1, now = 0;
 let palFrom = PALETTES.spring, palTo = PALETTES.spring, palT = 1, palDur = 5;
-let cine = null, glowFade = 1, glowTarget = 1, vigor = 1, deepT = 0, pinDone = false;
+let cine = null, glowFade = 1, glowTarget = 1, pinDone = false;
 const camLook = new THREE.Vector3(), _v = new THREE.Vector3();
 function toPalette(key, dur = 5) { palFrom = blendPal(pal, pal, 0); palTo = PALETTES[key]; palT = 0; palDur = dur; }
 const queue = []; // timed events
@@ -1081,35 +1086,28 @@ function startChapter(i) {
   chapter = i; const ch = CHAPTERS[i];
   toPalette(ch.key);
   scene.remove(stage); stage = new THREE.Group(); scene.add(stage);
-  if (ch.family) setFamily(ch.family);
   sound.scale = ch.scale;
   pMode = ch.particles;
   setSeasonLabel(ch.name, ch.sub);
   showLine(ch.intro, 6.5);
   targets = ch.setup();
+  if (ch.family) setFamily(ch.family);
   setDots(targets.length, 0);
   after(5, () => { if (chapter === i && state === 'play') setHint(ch.hint); });
   state = 'play';
 }
 
 function finishChapter() {
+  if (lastPhase) return;
   state = 'between'; setHint(''); after(1.5, () => setDots(0, 0));
   if (chapter === 0) trees.forEach(t => t.gT = 1);
+  if (chapter === 3) gpLook = true; // as the wind leaves the threshing floor, he looks up after it
   if (chapter < CHAPTERS.length - 1) {
     const next = chapter + 1;
     after(2.5, () => showLine(CHAPTERS[chapter].outro, 5));
     after(9, () => startChapter(next));
   } else {
-    after(2.5, () => {
-      showLine('灯一盏一盏，飞得很高很远。', 5);
-      for (let i = 0; i < 70; i++) after(i * 0.12, () => {
-        const a = rand() * 6.28, r = rand() * 55;
-        const x = VX + Math.cos(a) * r, z = VZ + Math.sin(a) * r;
-        riseLantern(makeLantern(x, Math.max(H(x, z), WATER) + 1.2, z), 2.4 + rand() * 2);
-      });
-    });
-    after(10, () => showLine('远方的人，也会看见。', 5));
-    after(17, startDeep);
+    after(3, lastLantern);
   }
 }
 
@@ -1126,9 +1124,10 @@ function startPrologue() {
   state = 'prologue'; setFamily('spring');
   glowTarget = 0; glowFade = 0;
   cine = { pos: OPENING.pos.clone(), look: OPENING.look.clone(), k: 0.9 };
-  after(6.5, () => showLine('“爷爷，它怎么不转？”', 4));
-  after(11, () => showLine('“等风来。\n风一来，春天就来了。”', 5.5));
+  after(6.5, () => { if (state === 'prologue') showLine('“爷爷，它怎么不转？”', 4); });
+  after(11, () => { if (state === 'prologue') showLine('“等风来。\n风一来，春天就来了。”', 5.5); });
   after(17.5, () => {
+    if (state !== 'prologue') return;
     // the wind arrives from behind the camera, heading for them
     const dir = OPENING.look.clone().sub(OPENING.pos).setY(0).normalize();
     player.pos.copy(OPENING.pos).addScaledVector(dir, 3).add(_v.set(0, 0.5, 0));
@@ -1146,67 +1145,50 @@ function onPinwheel() {
     const to = FAM.at(7, 26);
     girlRun = { from: famGirl.position.clone(), to, t: 0 };
   });
-  after(4.5, () => startChapter(0));
+  after(4.5, () => { if (state === 'meet') startChapter(0); });
 }
 
-// ---------------------------------------------------------------- 大寒: the wind grows old
-function startDeep() {
-  chapter = 5; state = 'deep'; deepT = 0; vigor = 1;
-  toPalette('deep', 6);
-  scene.remove(stage); stage = new THREE.Group(); scene.add(stage);
-  targets = []; setDots(0, 0); setHint('');
-  setFamily('deep');
-  pMode = { fall: 7, drift: 2.2, size: 1.0, color: C('#ffffff'), opacity: 0.95 };
-  sound.scale = [55, 57, 60, 62, 64];
-  setSeasonLabel('大寒', '一月二十日');
-  after(7, () => { $('season').style.opacity = 0; });
-  // what the year left behind: a boat moored by the bridge, haystacks, an old kite caught in the tree
-  const bz = VZ - 38, boat = new THREE.Group();
-  boat.add(figure(HULL));
-  const pv = new THREE.Group(); pv.position.set(1.3, 1.0, 0); pv.scale.y = 0.18; pv.add(new THREE.Mesh(SAIL, sailMat)); boat.add(pv);
-  boat.position.set(riverX(bz) + 5, WATER, bz); boat.rotation.y = Math.atan2(1, riverX(bz - 0.5) - riverX(bz + 0.5)) + 0.4;
-  stage.add(boat);
-  [[-20, 34], [-14, 44], [24, 58]].forEach(([dx, dz]) => {
-    const x = VX + dx, z = VZ + dz; if (Math.abs(x - riverX(z)) < 20) return;
-    const st = figure(stackGeo); st.position.set(x, H(x, z) - 0.2, z); stage.add(st);
-  });
-  const old = makeKite(kiteColors[0], kiteColors[1]);
-  old.position.copy(FAM.at(6.5, 1.5)).add(_v.set(0, 11.5, 0)); old.rotation.set(0.5, FAM.yaw + 0.4, 0.9); stage.add(old);
+// ---------------------------------------------------------------- the last lantern
+let lastPhase = 0, herLantern = null, gpLook = false;
+function lastLantern() {
+  lastPhase = 1; state = 'play';
+  const t = { pos: herLantern.getWorldPosition(new THREE.Vector3()), done: false, radius: 14, beacon: beacon(0xffb060),
+    onTouch: releaseLast, update() {} };
+  t.beacon.visible = false;
+  targets = [t];
 }
-function startDissolve() {
-  state = 'dissolve'; glowTarget = 0; sound.windScale = 0.15;
-  cine = { pos: new THREE.Vector3(VX + 70, OLD.y + 150, VZ + 170), look: new THREE.Vector3(VX - 20, OLD.y, VZ - 10), k: 0.22 };
-  after(6, () => toPalette('dawn', 9));
-  after(9, () => { pMode = { ...pMode, opacity: 0 }; });
-  after(16, () => { // another spring, without you
-    toPalette('spring', 9);
-    pMode = { fall: -0.3, drift: 0.8, size: 0.45, color: C('#fff4cf'), opacity: 0.55 };
-    sound.scale = CHAPTERS[0].scale; sound.windScale = 0.5;
-    trees.forEach(t => { t.g = 0; t.gT = 0; }); paintTrees();
-    scene.remove(stage); stage = new THREE.Group(); scene.add(stage);
-    targets = setupSpring(); targets.forEach(t => t.beacon.visible = false);
-    setFamily('end'); pin2.target = 0;
-    setSeasonLabel('立春', '又一年');
-    targets.forEach((t, i) => after(4 + i * 1.8, () => { t.done = true; t.onTouch(); }));
-    after(4 + targets.length * 1.8 + 1, () => trees.forEach(t => t.gT = 1));
+function releaseLast() {
+  state = 'finale'; setHint(''); setDots(0, 0); edge.style.opacity = 0;
+  $('line').classList.remove('show'); lineTimer = 0;
+  // she lets go
+  const g = herLantern; g.getWorldPosition(_v); scene.attach(g); g.position.copy(_v);
+  const x0 = g.position.x, z0 = g.position.z, side = new THREE.Vector3(2.2, 0.6, 1.4);
+  let v = 0.4;
+  extras.push(dt => {
+    v = Math.min(8.5, v + dt * 0.9);
+    g.position.y += v * dt;
+    g.position.x = x0 + Math.sin(now * 0.3) * 2 + (g.position.y - 10) * 0.04;
+    g.position.z = z0 + Math.cos(now * 0.25) * 2;
+    player.pos.copy(g.position).add(side); // the wind goes up with it
   });
-  after(19, () => { cine = { pos: OPENING.pos.clone(), look: OPENING.look.clone(), k: 0.35 }; });
-  after(30, () => {
-    pin2.target = 1;
-    const x = riverX(OLD.z - 40) - 55, z = OLD.z - 40, y = H(x, z), kite = makeKite(kiteColors[2], kiteColors[4]);
-    kite.position.set(x, y + 1, z); stage.add(kite); let e = 0;
-    extras.push(dt => { e = Math.min(1, e + dt * 0.08); kite.position.y = y + 1 + (1 - Math.pow(1 - e, 3)) * 34 + Math.sin(now * 1.1) * 1.2;
-      kite.rotation.set(-1.2 * (1 - e), Math.sin(now * 0.4) * 0.4, Math.sin(now * 0.9) * 0.25); });
+  // watch from the open valley side, looking back at the tree and the village behind it
+  cine = { follow: g, off: new THREE.Vector3(FAM.F.x * 30, -4, -9), maxY: 120, k: 0.7 };
+  sound.windScale = 0.3;
+  // then the whole village, one window at a time
+  for (let i = 0; i < 80; i++) after(3 + i * 0.13, () => {
+    const a = rand() * 6.28, r = 15 + rand() * 120;
+    const x = VX - 20 + Math.cos(a) * r, z = VZ + Math.sin(a) * r;
+    riseLantern(makeLantern(x, Math.max(H(x, z), WATER) + 1.2, z), 3.5 + rand() * 3.5);
   });
-  after(33, () => showLine('“风一来，春天就来了。”', 5));
-  after(40, () => showLine('没有人看见过风。', 4.5));
-  after(45.5, () => showLine('人们看见的，是万物。', 5.5));
-  after(53, () => {
+  after(10, () => extras.push(dt => { cloudMat.opacity = Math.max(0, cloudMat.opacity - dt * 0.06); })); // the clouds part
+  after(16, () => { pMode = { ...pMode, opacity: 0 }; });   // and the snow stops
+  after(20, () => { glowTarget = 0; });                       // and the wind goes with the light
+  after(40, () => {
     $('season').style.opacity = 0;
     const t = $('title'); t.querySelector('h1').textContent = '风物';
-    t.querySelector('.sub').innerHTML = '&nbsp;';
-    t.querySelector('.how').innerHTML = '谢谢你来过';
+    t.querySelector('.sub').innerHTML = '&nbsp;'; t.querySelector('.how').innerHTML = '&nbsp;';
     t.querySelector('.go').textContent = '点击重新开始';
+    t.style.background = 'rgba(8,12,26,0.35)'; t.style.color = '#e6e1d2'; t.querySelector('h1').style.color = '#f0ebdc';
     t.classList.remove('hide'); state = 'end';
   });
 }
@@ -1251,9 +1233,8 @@ function step(dt) {
   input.kx = (k.ArrowRight || k.KeyD ? 1 : 0) - (k.ArrowLeft || k.KeyA ? 1 : 0);
   input.ky = (k.ArrowDown || k.KeyS ? 1 : 0) - (k.ArrowUp || k.KeyW ? 1 : 0);
   const active = state !== 'title';
-  const frozen = state === 'prologue' || state === 'dissolve' || state === 'end';
-  if (state === 'deep') { deepT += dt; vigor = Math.max(0.15, 1 - deepT / 70); }
-  const vk = state === 'deep' || state === 'dissolve' ? vigor : 1;
+  const frozen = state === 'prologue' || state === 'finale' || state === 'end';
+  const vk = 1;
   let sx = input.kx || input.px, sy = input.ky || input.py;
   if (!active) { sx = 0.15; sy = 0; }
   if (frozen) { sx = 0; sy = 0; }
@@ -1267,7 +1248,7 @@ function step(dt) {
     let diff = Math.atan2(Math.sin(want - player.yaw), Math.cos(want - player.yaw));
     player.yaw += diff * Math.min(1, dt * smooth(520, 640, r) * 1.6);
   }
-  const cruise = state === 'meet' ? 7 : (input.boost && active && state !== 'deep' ? 62 : 28) * (0.3 + 0.7 * vk);
+  const cruise = state === 'meet' ? 7 : (input.boost && active ? 62 : 28);
   player.speed = lerp(player.speed, frozen ? 0 : cruise, Math.min(1, dt * 1.5));
   fwd.set(-Math.sin(player.yaw) * Math.cos(player.pitch), Math.sin(player.pitch), -Math.cos(player.yaw) * Math.cos(player.pitch));
   player.pos.addScaledVector(fwd, player.speed * dt);
@@ -1306,8 +1287,7 @@ function step(dt) {
   }
   if (state === 'meet' && !pinDone) { pin.wheel.getWorldPosition(_v); if (player.pos.distanceTo(_v) < 13) onPinwheel(); }
   if (pinDone) pin.target = player.pos.distanceTo(famGirl.position) < 22 ? 1 : 0.12;
-  for (const pw of [pin, pin2]) { pw.spin = lerp(pw.spin, pw.target, Math.min(1, dt * 0.8)); pw.wheel.rotation.z -= pw.spin * dt * 9; }
-  if (state === 'deep' && ((deepT > 20 && player.pos.distanceTo(famGirl.position) < 32) || deepT > 100)) startDissolve();
+  for (const pw of [pin]) { pw.spin = lerp(pw.spin, pw.target, Math.min(1, dt * 0.8)); pw.wheel.rotation.z -= pw.spin * dt * 9; }
   waterTime.value = now;
   trailPts.pop(); trailPts.unshift(player.pos.clone().add(tmp.set(Math.sin(now * 7) * 0.4, Math.cos(now * 5) * 0.4, 0)));
   const tp = trailGeo.attributes.position;
@@ -1315,6 +1295,16 @@ function step(dt) {
   trailMat.uniforms.scale.value = innerHeight;
 
   // camera
+  if (cine && cine.follow) {
+    _v.copy(cine.follow.position).add(cine.off); _v.y = Math.min(_v.y, cine.maxY);
+    _v.y = Math.max(_v.y, Math.max(H(_v.x, _v.z), WATER) + 3);
+    cine.pos = cine.pos || _v.clone(); cine.look = cine.look || cine.follow.position.clone();
+    cine.pos.lerp(_v, 1 - Math.exp(-dt * cine.k)); cine.look.lerp(cine.follow.position, 1 - Math.exp(-dt * 2));
+  }
+  if (gpLook && famGrandpa.visible) {
+    const want = Math.atan2(player.pos.x - famGrandpa.position.x, player.pos.z - famGrandpa.position.z);
+    famGrandpa.rotation.y += Math.atan2(Math.sin(want - famGrandpa.rotation.y), Math.cos(want - famGrandpa.rotation.y)) * Math.min(1, dt * 0.8);
+  }
   if (cine) {
     const k = 1 - Math.exp(-dt * cine.k);
     camPos.lerp(cine.pos, k); camLook.lerp(cine.look, k);
@@ -1363,7 +1353,8 @@ function step(dt) {
     if (state === 'play' && d < t.radius) {
       t.done = true; t.onTouch();
       const n = targets.filter(x => x.done).length;
-      sound.chime(n - 1); setDots(targets.length, n);
+      sound.chime(n - 1);
+      if (!lastPhase) setDots(targets.length, n);
       if (n === targets.length) finishChapter();
     }
   });
@@ -1397,7 +1388,7 @@ function loop() {
 loop();
 
 // debug hook for testing
-window.__wind = { player, startChapter, startDeep, startDissolve, get vigor() { return vigor; }, famGirl, counts: () => ({ trees: trees.length, shrubs: shrubs.length, tufts: tufts.length }), get targets() { return targets; }, get state() { return state; }, get chapter() { return chapter; }, step };
+window.__wind = { peek: (from, at) => { cine = { pos: new THREE.Vector3(...from), look: new THREE.Vector3(...at), k: 40 }; }, unpeek: () => { cine = null; }, player, scene, get stage() { return stage; }, startChapter, lastLantern, famGirl, counts: () => ({ trees: trees.length, shrubs: shrubs.length, tufts: tufts.length }), get targets() { return targets; }, get state() { return state; }, get chapter() { return chapter; }, step };
 </script>
 </body>
 </html>
