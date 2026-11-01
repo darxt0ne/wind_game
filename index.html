@@ -2107,16 +2107,29 @@ function step(dt) {
   sound.update(clamp((player.speed - 20) / 45, 0, 1));
 }
 
+// things that first appear mid-game get drawn once, out of sight behind the title, for the first few frames,
+// so their shaders (and shadow shaders) are compiled before play rather than as a stall when the chapter starts
+const warm = new THREE.Group(), _wd = new THREE.Vector3();
+{
+  const sail = new THREE.Mesh(SAIL, sailMat); sail.castShadow = true;
+  const fly = butterfly.g.clone(); fly.visible = true; fly.traverse(o => { o.castShadow = true; });
+  const lamp = new THREE.Group(); lamp.add(new THREE.Mesh(lanternGeo, lanternMat), new THREE.Sprite(lanternGlow));
+  warm.add(sail, new THREE.Mesh(HULL, kitMat), fly, makeKite('diamond', '#c8443a', '#f2d36b', '#2f5f8f'), makeRibbon('#c8443a').mesh, lamp);
+  warm.scale.setScalar(0.3); scene.add(warm);
+}
+let warmFrames = 3;
 function loop() {
   const dt = Math.min(clock.getDelta(), 0.05);
   step(dt);
+  if (warmFrames > 0) { camera.getWorldDirection(_wd); warm.position.copy(camera.position).addScaledVector(_wd, 8); }
   renderer.render(scene, camera);
+  if (warmFrames > 0 && --warmFrames === 0) scene.remove(warm);
   requestAnimationFrame(loop);
 }
 loop();
 
 // debug hook for testing
-window.__wind = { get now() { return now; }, get cine() { return cine; }, get pinDone() { return pinDone; }, FAM, OPENING, herWalk, peek: (from, at) => { cine = { pos: new THREE.Vector3(...from), look: new THREE.Vector3(...at), k: 40 }; }, unpeek: () => { cine = null; }, player, scene, get stage() { return stage; }, startChapter, lastLantern, famGirl, counts: () => ({ trees: trees.length, shrubs: shrubs.length, tufts: tufts.length }), get targets() { return targets; }, get state() { return state; }, get chapter() { return chapter; }, step, groundAt, terrain, chaser, butterfly, SUMMER };
+window.__wind = { get now() { return now; }, get cine() { return cine; }, get pinDone() { return pinDone; }, FAM, OPENING, herWalk, peek: (from, at) => { cine = { pos: new THREE.Vector3(...from), look: new THREE.Vector3(...at), k: 40 }; }, unpeek: () => { cine = null; }, player, scene, get stage() { return stage; }, startChapter, lastLantern, famGirl, counts: () => ({ trees: trees.length, shrubs: shrubs.length, tufts: tufts.length }), get targets() { return targets; }, get state() { return state; }, get chapter() { return chapter; }, step, groundAt, terrain, chaser, butterfly, SUMMER, renderer, camera };
 </script>
 </body>
 </html>
