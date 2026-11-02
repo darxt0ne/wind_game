@@ -14,20 +14,25 @@ fs.mkdirSync(OUT, { recursive: true });
   const errs = []; p.on('pageerror', e => errs.push(e.message));
   await p.addInitScript(() => { window.requestAnimationFrame = () => 1; }); // we drive the frames
   await p.goto('http://localhost:8765/index.html'); await p.waitForTimeout(3000);
+  await p.addStyleTag({ url: 'https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@200;300;400&display=block' });
   await p.addStyleTag({ content: `
     #season,#line,#hint,#dots,#edge{display:none!important}
     #tr-black{position:fixed;inset:0;background:#000;z-index:50;pointer-events:none}
-    .tr{position:fixed;z-index:60;pointer-events:none;font-family:"Noto Serif CJK SC","Noto Serif SC","Songti SC",serif;color:#f4ede0;opacity:0}
-    #tr-sub{left:0;right:0;bottom:78px;text-align:center;font-size:34px;letter-spacing:8px;text-shadow:0 2px 18px rgba(0,0,0,.55)}
-    #tr-card{left:0;right:0;top:50%;transform:translateY(-50%);text-align:center;font-size:44px;letter-spacing:18px}
-    #tr-season{left:64px;bottom:58px;font-size:24px;letter-spacing:12px;display:flex;align-items:center;gap:14px;text-shadow:0 1px 12px rgba(0,0,0,.5)}
-    #tr-season i{width:11px;height:11px;background:#c23b2e;display:block}
-    #tr-title{left:0;right:0;top:42%;transform:translateY(-50%);text-align:center}
-    #tr-title h1{margin:0;font-weight:600;font-size:120px;letter-spacing:52px;padding-left:52px}
-    #tr-title div{margin-top:34px;font-size:20px;letter-spacing:14px;color:#bdb5a6}` });
+    .tr{position:fixed;z-index:60;pointer-events:none;font-family:"Noto Serif SC",serif;font-weight:300;color:rgba(247,242,232,.94);opacity:0;
+        -webkit-font-smoothing:antialiased;text-rendering:geometricPrecision}
+    /* subtitles: small, light, widely spaced, low on the frame */
+    #tr-sub{left:0;right:0;bottom:38px;padding:16px 0;background:radial-gradient(ellipse 34% 100% at 50% 50%,rgba(8,10,14,.26),rgba(8,10,14,0) 100%);text-align:center;font-size:19px;letter-spacing:.42em;text-indent:.42em;text-shadow:0 0 14px rgba(0,0,0,.38),0 1px 2px rgba(0,0,0,.25)}
+    #tr-card{left:0;right:0;top:50%;transform:translateY(-50%);text-align:center;font-size:21px;font-weight:200;letter-spacing:.7em;text-indent:.7em}
+    /* season: a hairline of vermilion, then the name, very small */
+    #tr-season{left:56px;bottom:52px;font-size:13px;font-weight:400;letter-spacing:.6em;display:flex;align-items:center;gap:14px;color:rgba(247,242,232,.9);text-shadow:0 0 10px rgba(0,0,0,.35)}
+    #tr-season i{width:22px;height:1px;background:#d0503f;display:block}
+    #tr-title{left:0;right:0;top:46%;transform:translateY(-50%);text-align:center}
+    #tr-title h1{margin:0;font-weight:200;font-size:58px;letter-spacing:.62em;text-indent:.62em;color:#f2ece0}
+    #tr-title .rule{width:36px;height:1px;background:rgba(208,80,63,.85);margin:30px auto 22px}
+    #tr-title div.s{font-size:11px;font-weight:300;letter-spacing:.7em;text-indent:.7em;color:rgba(214,206,192,.7)}` });
   await p.evaluate(() => {
     for (const id of ['tr-black', 'tr-sub', 'tr-card', 'tr-season', 'tr-title']) { const d = document.createElement('div'); d.id = id; if (id !== 'tr-black') d.className = 'tr'; document.body.appendChild(d); }
-    document.getElementById('tr-title').innerHTML = '<h1>风物</h1><div>立春 · 清明 · 夏至 · 秋分 · 冬至</div>';
+    document.getElementById('tr-title').innerHTML = '<h1>风物</h1><div class="rule"></div><div class="s">立春　清明　夏至　秋分　冬至</div>';
     const w = window.__wind, $ = id => document.getElementById(id);
     // one frame: optional scripted wind and camera, advance, draw, set the overlays
     window.__T = (f) => {
@@ -41,6 +46,8 @@ fs.mkdirSync(OUT, { recursive: true });
       $('tr-title').style.opacity = f.title ?? 0;
     };
   });
+  await p.evaluate(async () => { const t = '爷它怎么不转等风来你是立春清明夏至秋分冬他说一就了物'; for (const w of [200, 300, 400]) await document.fonts.load(`${w} 20px "Noto Serif SC"`, t); await document.fonts.ready; });
+  console.log('font ok', await p.evaluate(() => document.fonts.check('300 20px "Noto Serif SC"', '风')));
   const T = f => p.evaluate(f => window.__T(f), f);
   const ff = s => p.evaluate(n => { const w = window.__wind; for (let i = 0; i < n; i++) w.step(1 / 24); }, Math.round(s * FPS));
   const q = fn => p.evaluate(fn);
