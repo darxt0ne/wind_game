@@ -7,3 +7,7 @@ lettering.*
 glyphs.js
 icons.html
 icons-preview.png
+# poster test shots; only the final scenes (F_*) and posters are kept
+poster/*.png
+!poster/F_*.png
+!poster/风物海报-*.png

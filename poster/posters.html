@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>风物 海报</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #111; }
+  .poster { position: relative; width: 1920px; height: 1080px; overflow: hidden; font-family: "Noto Serif SC", serif; }
+  .poster img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .veil { position: absolute; inset: 0; }
+  .col { position: absolute; top: 120px; display: flex; flex-direction: row-reverse; align-items: flex-start; gap: 46px; }
+  .title { writing-mode: vertical-rl; font-size: 150px; font-weight: 600; letter-spacing: 40px; line-height: 1; }
+  .lines { writing-mode: vertical-rl; font-size: 40px; font-weight: 400; letter-spacing: 12px; line-height: 1.9; margin-top: 30px; }
+  .lines p { margin: 0 0 0 10px; }
+  .season { position: absolute; display: flex; align-items: center; gap: 18px; font-size: 26px; letter-spacing: 14px; font-weight: 400; }
+  .season i { width: 14px; height: 14px; background: #c23b2e; display: block; }
+  .foot { position: absolute; bottom: 52px; font-size: 20px; letter-spacing: 10px; font-weight: 300; }
+  .ink { color: #23262b; }  .ink .lines, .ink .season, .ink .foot { color: #2f3338; }
+  .light { color: #f6efe0; text-shadow: 0 2px 24px rgba(0,0,0,.35); }
+</style></head>
+<body>
+
+<!-- 1 · 序章：山谷全景，古树下两个人 -->
+<section class="poster ink" id="p1">
+  <img src="F_pro.png">
+  <div class="veil" style="background: linear-gradient(270deg, rgba(240,238,230,.78) 0%, rgba(240,238,230,.35) 22%, rgba(240,238,230,0) 40%)"></div>
+  <div class="col" style="right: 120px">
+    <div class="title">风物</div>
+    <div class="lines"><p>爷爷，它怎么不转？</p><p style="margin-top:110px">等风来。</p></div>
+  </div>
+  <div class="season" style="left: 96px; top: 84px"><i></i>立春</div>
+</section>
+
+<!-- 2 · 清明：风筝在河谷上空 -->
+<section class="poster ink" id="p2">
+  <img src="F_kite.png">
+  <div class="veil" style="background: linear-gradient(90deg, rgba(236,240,244,.7) 0%, rgba(236,240,244,.3) 22%, rgba(236,240,244,0) 38%)"></div>
+  <div class="col" style="left: 110px">
+    <div class="title">风物</div>
+    <div class="lines"><p>风一来，春天就来了。</p></div>
+  </div>
+  <div class="season" style="right: 96px; top: 84px"><i></i>清明</div>
+</section>
+
+<!-- 3 · 夏至：帆船顺流而下 -->
+<section class="poster ink" id="p3">
+  <img src="F_sum.png">
+  <div class="veil" style="background: linear-gradient(270deg, rgba(236,240,240,.72) 0%, rgba(236,240,240,.3) 22%, rgba(236,240,240,0) 38%)"></div>
+  <div class="col" style="right: 120px">
+    <div class="title">风物</div>
+    <div class="lines"><p>河上的小船，</p><p style="margin-top:80px">等着风来鼓起帆。</p></div>
+  </div>
+  <div class="season" style="left: 96px; top: 84px"><i></i>夏至</div>
+</section>
+
+<!-- 4 · 冬至：满村的灯升上夜空 -->
+<section class="poster light" id="p4">
+  <img src="F_win.png">
+  <div class="veil" style="background: linear-gradient(90deg, rgba(10,14,26,.6) 0%, rgba(10,14,26,.25) 24%, rgba(10,14,26,0) 40%)"></div>
+  <div class="col" style="left: 110px">
+    <div class="title">风物</div>
+    <div class="lines"><p>我们看不见风。</p><p style="margin-top:80px">可世间万物都记得他来过。</p></div>
+  </div>
+  <div class="season" style="right: 96px; top: 84px; color: #f0e6d0"><i></i>冬至</div>
+</section>
+
+</body></html>
