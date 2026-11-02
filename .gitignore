@@ -11,3 +11,4 @@ icons-preview.png
 poster/*.png
 !poster/F_*.png
 !poster/风物海报-*.png
+trailer/*.wav
